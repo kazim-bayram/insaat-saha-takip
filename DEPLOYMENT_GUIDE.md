@@ -157,9 +157,9 @@ Copy the output - you'll need it for Vercel environment variables.
 
 ## 🎨 Frontend Configuration
 
-### Step 5: Update CORS Settings
+### Step 5: Verify Vercel Configuration
 
-Edit `vercel.json` to match your production domain:
+The `vercel.json` file is already configured with proper routing:
 
 ```json
 {
@@ -169,11 +169,23 @@ Edit `vercel.json` to match your production domain:
       "maxDuration": 10
     }
   },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
   "env": {
     "ALLOWED_ORIGIN": "https://your-actual-domain.vercel.app"
   }
 }
 ```
+
+**Important:** Update `ALLOWED_ORIGIN` to match your actual Vercel domain before deploying.
 
 ### Step 6: Update API Base URL
 

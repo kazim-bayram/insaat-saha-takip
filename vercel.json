@@ -5,6 +5,16 @@
       "maxDuration": 10
     }
   },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
   "env": {
     "FIREBASE_SERVICE_ACCOUNT_KEY": "@firebase_service_account_key",
     "ALLOWED_ORIGIN": "https://your-domain.vercel.app"
