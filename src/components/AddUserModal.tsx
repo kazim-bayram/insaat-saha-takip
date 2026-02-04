@@ -105,15 +105,18 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
       // STEP 2: Create user profile in Firestore using MAIN db instance
       // This uses the admin's authentication context, not the new user's
       try {
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          uid: userCredential.user.uid,
-          email: email,
-          username: username.toLowerCase(),
-          displayName: displayName,
-          role: role,
-          isActive: true, // Default to active
+        // Create clean user data object - ensure NO undefined values
+        const userData = {
+          uid: userCredential.user.uid ?? '',
+          email: email ?? '',
+          username: (username ?? '').toLowerCase(),
+          displayName: displayName ?? '',
+          role: role ?? 'worker',
+          isActive: true,
           createdAt: serverTimestamp()
-        });
+        };
+        
+        await setDoc(doc(db, 'users', userCredential.user.uid), userData);
       } catch (firestoreError: any) {
         // If Firestore write fails, clean up the auth user
         console.error('Firestore write failed:', firestoreError);

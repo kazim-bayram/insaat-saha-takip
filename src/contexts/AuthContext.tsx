@@ -86,16 +86,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   ): Promise<UserProfile> => {
     const userDocRef = doc(db, 'users', user.uid);
     
-    // Create user document with server timestamp and isActive flag
-    await setDoc(userDocRef, {
-      uid: user.uid,
-      email: user.email || '',
-      username: username.toLowerCase(),
-      displayName,
-      role,
-      isActive: true, // Default to active
+    // Create clean user data object - ensure NO undefined values
+    const userData = {
+      uid: user.uid ?? '',
+      email: user.email ?? '',
+      username: (username ?? '').toLowerCase(),
+      displayName: displayName ?? '',
+      role: role ?? 'worker',
+      isActive: true,
       createdAt: serverTimestamp()
-    });
+    };
+    
+    // Create user document with server timestamp and isActive flag
+    await setDoc(userDocRef, userData);
 
     // Fetch the created profile to return with actual timestamp
     const userDoc = await getDoc(userDocRef);
