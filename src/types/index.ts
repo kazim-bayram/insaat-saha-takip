@@ -157,16 +157,3 @@ export interface Comment {
   createdAt: Timestamp | Date | string | number | null;
 }
 
-// Notification system
-export interface Notification {
-  id: string;
-  recipientId: string;
-  senderId: string;
-  senderName: string;
-  noteId: string;
-  noteTitle: string;
-  message: string;
-  type: 'comment' | 'edit' | 'status_change';
-  isRead: boolean;
-  createdAt: Timestamp;
-}

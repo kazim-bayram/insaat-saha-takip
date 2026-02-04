@@ -10,6 +10,7 @@ import {
   HardHat,
   FileText,
   ChevronDown,
+  ChevronUp,
   Sun,
   Moon,
   Download,
@@ -19,24 +20,23 @@ import {
   BarChart3,
   Search,
   MapPin,
-  RotateCcw
+  RotateCcw,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotes } from '../hooks/useNotes';
-import { useNotifications } from '../hooks/useNotifications';
 import { Note, FilterOptions, NOTE_STATUS_CONFIG, NoteFormData, getNoteImages } from '../types';
 import NoteCard from './NoteCard';
 import NoteDetailModal from './NoteDetailModal';
 import AddNoteModal from './AddNoteModal';
-import NotificationDropdown from './NotificationDropdown';
 import ProfileSettings from './ProfileSettings';
 import UserManagement from './UserManagement';
 import UserProfileMenu from './UserProfileMenu';
 import LoadingSpinner, { NotesGridSkeleton } from './LoadingSpinner';
 
 const Dashboard: React.FC = () => {
-  const { userProfile, logout, isAdmin, currentUser } = useAuth();
+  const { logout, isAdmin } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const {
     notes,
@@ -58,14 +58,6 @@ const Dashboard: React.FC = () => {
     getKPIStats
   } = useNotes();
 
-  const {
-    notifications,
-    unreadCount,
-    markAsRead,
-    markAllAsRead,
-    createNotification
-  } = useNotifications();
-
   // Modal durumları
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -76,6 +68,7 @@ const Dashboard: React.FC = () => {
 
   // Görünüm durumu
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   // Filtre durumu
   const [filters, setFilters] = useState<FilterOptions>({
@@ -194,19 +187,6 @@ const Dashboard: React.FC = () => {
         formData.images.length > 0 ? formData.images : undefined,
         existingImageUrls
       );
-      
-      // If admin is editing someone else's note, create notification
-      if (isAdmin && currentUser && editingNote.userId !== currentUser.uid && userProfile) {
-        await createNotification(
-          editingNote.userId,
-          currentUser.uid,
-          userProfile.displayName,
-          editingNote.id,
-          editingNote.title,
-          `${userProfile.displayName} raporunuzu düzenledi`,
-          'edit'
-        );
-      }
     } else {
       await createNote(formData);
     }
@@ -218,39 +198,10 @@ const Dashboard: React.FC = () => {
     setEditingNote(null);
   };
 
-  // Handle adding comment with notification
+  // Handle adding comment
   const handleAddComment = async (noteId: string, text: string) => {
     const comment = await addComment(noteId, text);
-    
-    // Find the note to get owner info
-    const note = notes.find(n => n.id === noteId);
-    if (note && currentUser && userProfile) {
-      // If admin comments on worker's note, notify the worker
-      if (isAdmin && note.userId !== currentUser.uid) {
-        await createNotification(
-          note.userId,
-          currentUser.uid,
-          userProfile.displayName,
-          noteId,
-          note.title,
-          `${userProfile.displayName} notunuza yorum ekledi: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`,
-          'comment'
-        );
-      }
-      // If worker replies, notify the admin (notify all admins or the last commenter who was admin)
-      // For simplicity, we'll just handle admin -> worker notifications
-    }
-    
     return comment;
-  };
-
-  // Handle notification click - navigate to the relevant note
-  const handleNotificationClick = (notification: any) => {
-    const note = notes.find(n => n.id === notification.noteId);
-    if (note) {
-      setSelectedNote(note);
-      setShowDetailModal(true);
-    }
   };
 
   const clearFilters = () => {
@@ -300,15 +251,24 @@ const Dashboard: React.FC = () => {
             </div>
 
             {/* Kullanıcı Bilgisi & Aksiyonlar */}
-            <div className="flex items-center gap-3">
-              {/* Bildirimler */}
-              <NotificationDropdown
-                notifications={notifications}
-                unreadCount={unreadCount}
-                onMarkAsRead={markAsRead}
-                onMarkAllAsRead={markAllAsRead}
-                onNotificationClick={handleNotificationClick}
-              />
+            <div className="flex items-center gap-2">
+              {/* Search/Filter Toggle Button */}
+              <button
+                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                className={`relative p-2 rounded-lg transition-colors ${
+                  isFiltersOpen || hasActiveFilters
+                    ? 'bg-safety-orange/20 text-safety-orange'
+                    : isDark 
+                      ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
+                      : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                title="Ara ve Filtrele"
+              >
+                <SlidersHorizontal className="w-5 h-5" />
+                {hasActiveFilters && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-safety-orange rounded-full border-2 border-slate-850" />
+                )}
+              </button>
 
               {/* Tema Değiştirici */}
               <button
@@ -329,6 +289,242 @@ const Dashboard: React.FC = () => {
                 onOpenUserManagement={() => setShowUserManagement(true)}
                 onLogout={handleLogout}
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible Filter Panel */}
+        <div 
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${
+            isFiltersOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
+        >
+          <div className={`border-t ${isDark ? 'border-slate-700/50 bg-slate-900/50' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              {/* Search Bar - Full Width */}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  <input
+                    type="text"
+                    value={filters.searchQuery}
+                    onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                    placeholder="Başlık veya içerikte ara..."
+                    className={`w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-safety-orange/20 focus:border-safety-orange transition-all ${
+                      isDark 
+                        ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500' 
+                        : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 shadow-sm'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Filter Grid - Responsive */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                {/* Ada (Island) */}
+                <div>
+                  <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                    Ada
+                  </label>
+                  <div className="relative">
+                    <MapPin className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                    <input
+                      type="text"
+                      value={filters.ada}
+                      onChange={(e) => setFilters({ ...filters, ada: e.target.value })}
+                      placeholder="Ada No"
+                      className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                        isDark 
+                          ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500' 
+                          : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 shadow-sm'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Parsel (Parcel) */}
+                <div>
+                  <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                    Parsel
+                  </label>
+                  <div className="relative">
+                    <MapPin className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                    <input
+                      type="text"
+                      value={filters.parsel}
+                      onChange={(e) => setFilters({ ...filters, parsel: e.target.value })}
+                      placeholder="Parsel No"
+                      className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                        isDark 
+                          ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500' 
+                          : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 shadow-sm'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Project Dropdown */}
+                <div>
+                  <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                    Proje
+                  </label>
+                  <div className="relative">
+                    <FolderOpen className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                    <select
+                      value={filters.projectName}
+                      onChange={(e) => setFilters({ ...filters, projectName: e.target.value })}
+                      className={`w-full rounded-lg pl-9 pr-8 py-2.5 text-sm appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
+                        isDark 
+                          ? 'bg-slate-800 border border-slate-600 text-white' 
+                          : 'bg-white border border-gray-300 text-gray-900 shadow-sm'
+                      }`}
+                    >
+                      <option value="">Tümü</option>
+                      {projectNames.map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  </div>
+                </div>
+
+                {/* Worker Dropdown (Admin only) */}
+                {isAdmin && (
+                  <div>
+                    <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                      Çalışan
+                    </label>
+                    <div className="relative">
+                      <User className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                      <select
+                        value={filters.workerEmail}
+                        onChange={(e) => setFilters({ ...filters, workerEmail: e.target.value })}
+                        className={`w-full rounded-lg pl-9 pr-8 py-2.5 text-sm appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
+                          isDark 
+                            ? 'bg-slate-800 border border-slate-600 text-white' 
+                            : 'bg-white border border-gray-300 text-gray-900 shadow-sm'
+                        }`}
+                      >
+                        <option value="">Tümü</option>
+                        {workerNames.map(worker => (
+                          <option key={worker.email} value={worker.email}>{worker.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Date Picker */}
+                <div>
+                  <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                    Tarih
+                  </label>
+                  <div className="relative">
+                    <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                    <input
+                      type="date"
+                      value={filters.dateFrom}
+                      onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value, dateTo: e.target.value })}
+                      className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                        isDark 
+                          ? 'bg-slate-800 border border-slate-600 text-white' 
+                          : 'bg-white border border-gray-300 text-gray-900 shadow-sm'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Reset Button */}
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      clearFilters();
+                    }}
+                    disabled={!hasActiveFilters}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      hasActiveFilters
+                        ? 'bg-safety-orange text-white hover:bg-safety-orange-dark'
+                        : isDark 
+                          ? 'bg-slate-800 text-concrete-400 border border-slate-600' 
+                          : 'bg-white text-gray-500 border border-gray-300'
+                    }`}
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Sıfırla
+                  </button>
+                </div>
+
+                {/* Close Button */}
+                <div className="flex items-end">
+                  <button
+                    onClick={() => setIsFiltersOpen(false)}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      isDark 
+                        ? 'bg-slate-800 text-concrete-300 hover:text-white border border-slate-600' 
+                        : 'bg-white text-gray-600 hover:text-gray-800 border border-gray-300 shadow-sm'
+                    }`}
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                    Kapat
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Filters Summary */}
+              {hasActiveFilters && (
+                <div className={`mt-3 pt-3 border-t flex items-center gap-2 flex-wrap ${isDark ? 'border-slate-700' : 'border-gray-300'}`}>
+                  <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Aktif:</span>
+                  {filters.searchQuery && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      "{filters.searchQuery}"
+                      <button onClick={() => setFilters({ ...filters, searchQuery: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filters.ada && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      Ada: {filters.ada}
+                      <button onClick={() => setFilters({ ...filters, ada: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filters.parsel && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      Parsel: {filters.parsel}
+                      <button onClick={() => setFilters({ ...filters, parsel: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filters.projectName && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      {filters.projectName}
+                      <button onClick={() => setFilters({ ...filters, projectName: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filters.workerEmail && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      {workerNames.find(w => w.email === filters.workerEmail)?.name || filters.workerEmail}
+                      <button onClick={() => setFilters({ ...filters, workerEmail: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filters.dateFrom && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      {new Date(filters.dateFrom).toLocaleDateString('tr-TR')}
+                      <button onClick={() => setFilters({ ...filters, dateFrom: '', dateTo: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -488,221 +684,6 @@ const Dashboard: React.FC = () => {
               </button>
             )}
           </div>
-        </div>
-
-        {/* Advanced Filter Bar */}
-        <div className={`rounded-xl border p-4 mb-6 ${
-          isDark 
-            ? 'bg-slate-850 border-slate-700/50' 
-            : 'bg-gray-100 border-gray-200'
-        }`}>
-          {/* Search Bar - Full Width */}
-          <div className="mb-4">
-            <div className="relative">
-              <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-              <input
-                type="text"
-                value={filters.searchQuery}
-                onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                placeholder="Başlık veya içerikte ara..."
-                className={`w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-safety-orange/20 focus:border-safety-orange transition-all ${
-                  isDark 
-                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500' 
-                    : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400'
-                }`}
-              />
-            </div>
-          </div>
-
-          {/* Filter Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {/* Ada (Island) */}
-            <div>
-              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                Ada
-              </label>
-              <div className="relative">
-                <MapPin className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                <input
-                  type="text"
-                  value={filters.ada}
-                  onChange={(e) => setFilters({ ...filters, ada: e.target.value })}
-                  placeholder="Ada No"
-                  className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
-                    isDark 
-                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500' 
-                      : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* Parsel (Parcel) */}
-            <div>
-              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                Parsel
-              </label>
-              <div className="relative">
-                <MapPin className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                <input
-                  type="text"
-                  value={filters.parsel}
-                  onChange={(e) => setFilters({ ...filters, parsel: e.target.value })}
-                  placeholder="Parsel No"
-                  className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
-                    isDark 
-                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500' 
-                      : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* Project Dropdown */}
-            <div>
-              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                Proje
-              </label>
-              <div className="relative">
-                <FolderOpen className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                <select
-                  value={filters.projectName}
-                  onChange={(e) => setFilters({ ...filters, projectName: e.target.value })}
-                  className={`w-full rounded-lg pl-9 pr-8 py-2.5 text-sm appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
-                    isDark 
-                      ? 'bg-slate-900/50 border border-slate-600 text-white' 
-                      : 'bg-white border border-gray-300 text-gray-900'
-                  }`}
-                >
-                  <option value="">Tümü</option>
-                  {projectNames.map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-              </div>
-            </div>
-
-            {/* Worker Dropdown (Admin only) */}
-            {isAdmin && (
-              <div>
-                <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                  Çalışan
-                </label>
-                <div className="relative">
-                  <User className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <select
-                    value={filters.workerEmail}
-                    onChange={(e) => setFilters({ ...filters, workerEmail: e.target.value })}
-                    className={`w-full rounded-lg pl-9 pr-8 py-2.5 text-sm appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white' 
-                        : 'bg-white border border-gray-300 text-gray-900'
-                    }`}
-                  >
-                    <option value="">Tümü</option>
-                    {workerNames.map(worker => (
-                      <option key={worker.email} value={worker.email}>{worker.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                </div>
-              </div>
-            )}
-
-            {/* Date Picker */}
-            <div>
-              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                Tarih
-              </label>
-              <div className="relative">
-                <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                <input
-                  type="date"
-                  value={filters.dateFrom}
-                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value, dateTo: e.target.value })}
-                  className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
-                    isDark 
-                      ? 'bg-slate-900/50 border border-slate-600 text-white' 
-                      : 'bg-white border border-gray-300 text-gray-900'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* Reset Button */}
-            <div className="flex items-end">
-              <button
-                onClick={clearFilters}
-                disabled={!hasActiveFilters}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                  hasActiveFilters
-                    ? 'bg-safety-orange/20 text-safety-orange hover:bg-safety-orange/30'
-                    : isDark 
-                      ? 'bg-slate-800 text-concrete-400' 
-                      : 'bg-gray-200 text-gray-500'
-                }`}
-              >
-                <RotateCcw className="w-4 h-4" />
-                Sıfırla
-              </button>
-            </div>
-          </div>
-
-          {/* Active Filters Summary */}
-          {hasActiveFilters && (
-            <div className={`mt-3 pt-3 border-t flex items-center gap-2 flex-wrap ${isDark ? 'border-slate-700' : 'border-gray-300'}`}>
-              <span className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Aktif filtreler:</span>
-              {filters.searchQuery && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
-                  Arama: "{filters.searchQuery}"
-                  <button onClick={() => setFilters({ ...filters, searchQuery: '' })} className="hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {filters.ada && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
-                  Ada: {filters.ada}
-                  <button onClick={() => setFilters({ ...filters, ada: '' })} className="hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {filters.parsel && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
-                  Parsel: {filters.parsel}
-                  <button onClick={() => setFilters({ ...filters, parsel: '' })} className="hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {filters.projectName && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
-                  Proje: {filters.projectName}
-                  <button onClick={() => setFilters({ ...filters, projectName: '' })} className="hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {filters.workerEmail && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
-                  Çalışan: {workerNames.find(w => w.email === filters.workerEmail)?.name || filters.workerEmail}
-                  <button onClick={() => setFilters({ ...filters, workerEmail: '' })} className="hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {filters.dateFrom && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
-                  Tarih: {new Date(filters.dateFrom).toLocaleDateString('tr-TR')}
-                  <button onClick={() => setFilters({ ...filters, dateFrom: '', dateTo: '' })} className="hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Notlar Gösterimi */}
