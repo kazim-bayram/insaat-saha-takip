@@ -23,7 +23,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotes } from '../hooks/useNotes';
-import { Note, FilterOptions, NOTE_STATUS_CONFIG } from '../types';
+import { Note, FilterOptions, NOTE_STATUS_CONFIG, NoteFormData, getNoteImages } from '../types';
 import NoteCard from './NoteCard';
 import NoteDetailModal from './NoteDetailModal';
 import AddNoteModal from './AddNoteModal';
@@ -37,6 +37,7 @@ const Dashboard: React.FC = () => {
     loading,
     error,
     uploading,
+    uploadProgress,
     createNote,
     updateNote,
     deleteNote,
@@ -92,7 +93,7 @@ const Dashboard: React.FC = () => {
       'Çalışan Email',
       'Açıklama',
       'Durum',
-      'Resim URL'
+      'Resim URLleri'
     ];
 
     // Map status to Turkish labels
@@ -115,6 +116,9 @@ const Dashboard: React.FC = () => {
         return `"${escaped}"`;
       };
 
+      // Get all image URLs with backward compatibility
+      const imageUrls = getNoteImages(note).join(' | ');
+
       return [
         escapeCSV(date),
         escapeCSV(note.projectName || ''),
@@ -123,7 +127,7 @@ const Dashboard: React.FC = () => {
         escapeCSV(note.userEmail || ''),
         escapeCSV(note.content || ''),
         escapeCSV(getStatusLabel(note.status || 'open')),
-        escapeCSV(note.imageUrl || '')
+        escapeCSV(imageUrls)
       ].join(',');
     });
 
@@ -161,9 +165,9 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleSubmitNote = async (formData: { title: string; content: string; projectName: string; image: File | null }) => {
+  const handleSubmitNote = async (formData: NoteFormData) => {
     if (editingNote) {
-      await updateNote(editingNote.id, formData, formData.image || undefined);
+      await updateNote(editingNote.id, formData, formData.images.length > 0 ? formData.images : undefined);
     } else {
       await createNote(formData);
     }
@@ -625,6 +629,7 @@ const Dashboard: React.FC = () => {
         onClose={handleCloseAddModal}
         onSubmit={handleSubmitNote}
         editNote={editingNote}
+        uploadProgress={uploadProgress}
       />
 
       <NoteDetailModal

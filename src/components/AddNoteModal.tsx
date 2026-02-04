@@ -9,23 +9,31 @@ import {
   Image as ImageIcon,
   Plus,
   Trash2,
-  MapPin
+  MapPin,
+  Layers
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { NoteFormData, Note, CustomField } from '../types';
+import { NoteFormData, Note, CustomField, UploadProgress, getNoteImages } from '../types';
+
+interface ImagePreview {
+  file: File;
+  previewUrl: string;
+}
 
 interface AddNoteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: NoteFormData) => Promise<void>;
   editNote?: Note | null;
+  uploadProgress?: UploadProgress | null;
 }
 
 const AddNoteModal: React.FC<AddNoteModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
-  editNote
+  editNote,
+  uploadProgress
 }) => {
   const { isDark } = useTheme();
   const [title, setTitle] = useState('');
@@ -34,8 +42,9 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const [ada, setAda] = useState('');
   const [parsel, setParsel] = useState('');
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  // Multi-image state
+  const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]); // For edit mode
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,9 +60,9 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       setAda(editNote.ada || '');
       setParsel(editNote.parsel || '');
       setCustomFields(editNote.customFields || []);
-      if (editNote.imageUrl) {
-        setImagePreview(editNote.imageUrl);
-      }
+      // Load existing images with backward compatibility
+      const images = getNoteImages(editNote);
+      setExistingImages(images);
     } else {
       resetForm();
     }
@@ -66,8 +75,10 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     setAda('');
     setParsel('');
     setCustomFields([]);
-    setImageFile(null);
-    setImagePreview(null);
+    // Clean up preview URLs
+    imagePreviews.forEach(preview => URL.revokeObjectURL(preview.previewUrl));
+    setImagePreviews([]);
+    setExistingImages([]);
     setError(null);
   };
 
@@ -86,28 +97,63 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     setCustomFields(customFields.filter((_, i) => i !== index));
   };
 
+  // Handle multiple image selection
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    // Dosya türü kontrolü
-    if (!file.type.startsWith('image/')) {
-      setError('Lütfen bir resim dosyası seçin');
-      return;
+    const newPreviews: ImagePreview[] = [];
+    const errors: string[] = [];
+
+    Array.from(files).forEach(file => {
+      // Dosya türü kontrolü
+      if (!file.type.startsWith('image/')) {
+        errors.push(`${file.name}: Geçersiz dosya türü`);
+        return;
+      }
+
+      // Dosya boyutu kontrolü (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        errors.push(`${file.name}: 10MB'dan büyük`);
+        return;
+      }
+
+      // Check total limit (max 10 images)
+      if (imagePreviews.length + existingImages.length + newPreviews.length >= 10) {
+        errors.push('En fazla 10 resim yüklenebilir');
+        return;
+      }
+
+      const previewUrl = URL.createObjectURL(file);
+      newPreviews.push({ file, previewUrl });
+    });
+
+    if (errors.length > 0) {
+      setError(errors.join(', '));
+    } else {
+      setError(null);
     }
 
-    // Dosya boyutu kontrolü (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Resim 10MB\'dan küçük olmalıdır');
-      return;
+    if (newPreviews.length > 0) {
+      setImagePreviews(prev => [...prev, ...newPreviews]);
     }
 
-    setImageFile(file);
-    setError(null);
+    // Reset input
+    e.target.value = '';
+  };
 
-    // Önizleme oluştur
-    const previewUrl = URL.createObjectURL(file);
-    setImagePreview(previewUrl);
+  // Remove a new image preview
+  const removeImagePreview = (index: number) => {
+    setImagePreviews(prev => {
+      const toRemove = prev[index];
+      URL.revokeObjectURL(toRemove.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  // Remove an existing image (edit mode)
+  const removeExistingImage = (index: number) => {
+    setExistingImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -133,6 +179,9 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         field => field.label.trim() && field.value.trim()
       );
 
+      // Get files array from previews
+      const imageFiles = imagePreviews.map(preview => preview.file);
+
       await onSubmit({
         title: title.trim(),
         content: content.trim(),
@@ -140,7 +189,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         ada: ada.trim(),
         parsel: parsel.trim(),
         customFields: filteredCustomFields,
-        image: imageFile
+        images: imageFiles
       });
       resetForm();
       onClose();
@@ -157,12 +206,15 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     }
   };
 
-  const removeImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
+  const clearAllImages = () => {
+    imagePreviews.forEach(preview => URL.revokeObjectURL(preview.previewUrl));
+    setImagePreviews([]);
+    setExistingImages([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
+
+  const totalImages = imagePreviews.length + existingImages.length;
 
   if (!isOpen) return null;
 
@@ -209,28 +261,114 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
 
             {/* Resim Yükleme Bölümü */}
             <div>
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                Fotoğraf
-              </label>
-
-              {imagePreview ? (
-                <div className={`relative rounded-xl overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
-                  <img
-                    src={imagePreview}
-                    alt="Önizleme"
-                    className="w-full h-48 object-cover"
-                  />
-
-                  {/* Kaldır Butonu */}
+              <div className="flex items-center justify-between mb-2">
+                <label className={`block text-sm font-medium ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  <span className="flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    Fotoğraflar {totalImages > 0 && `(${totalImages}/10)`}
+                  </span>
+                </label>
+                {totalImages > 0 && (
                   <button
                     type="button"
-                    onClick={removeImage}
-                    className="absolute top-2 left-2 p-1.5 bg-red-500/90 hover:bg-red-500 rounded-lg transition-colors"
+                    onClick={clearAllImages}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
                   >
-                    <X className="w-4 h-4 text-white" />
+                    Tümünü Temizle
                   </button>
+                )}
+              </div>
+
+              {/* Upload Progress Indicator */}
+              {uploadProgress && (
+                <div className={`mb-3 p-3 rounded-xl ${isDark ? 'bg-slate-800' : 'bg-blue-50'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                      Yükleniyor {uploadProgress.current}/{uploadProgress.total}...
+                    </span>
+                    <span className={`text-sm ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                      %{uploadProgress.percentage}
+                    </span>
+                  </div>
+                  <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-slate-700' : 'bg-blue-200'}`}>
+                    <div 
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress.percentage}%` }}
+                    />
+                  </div>
                 </div>
-              ) : (
+              )}
+
+              {/* Image Grid Preview */}
+              {totalImages > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {/* Existing images (edit mode) */}
+                  {existingImages.map((url, index) => (
+                    <div 
+                      key={`existing-${index}`} 
+                      className={`relative aspect-square rounded-lg overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}
+                    >
+                      <img
+                        src={url}
+                        alt={`Mevcut ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(index)}
+                        className="absolute top-1 right-1 p-1 bg-red-500/90 hover:bg-red-500 rounded-md transition-colors"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                      <div className={`absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        isDark ? 'bg-slate-900/80 text-concrete-300' : 'bg-white/80 text-gray-600'
+                      }`}>
+                        Mevcut
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* New image previews */}
+                  {imagePreviews.map((preview, index) => (
+                    <div 
+                      key={`new-${index}`} 
+                      className={`relative aspect-square rounded-lg overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}
+                    >
+                      <img
+                        src={preview.previewUrl}
+                        alt={`Yeni ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImagePreview(index)}
+                        className="absolute top-1 right-1 p-1 bg-red-500/90 hover:bg-red-500 rounded-md transition-colors"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {/* Add more button (if under limit) */}
+                  {totalImages < 10 && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`aspect-square rounded-lg border-2 border-dashed flex flex-col items-center justify-center transition-colors ${
+                        isDark 
+                          ? 'border-slate-600 hover:border-safety-orange text-concrete-400 hover:text-safety-orange' 
+                          : 'border-gray-300 hover:border-safety-orange text-gray-400 hover:text-safety-orange'
+                      }`}
+                    >
+                      <Plus className="w-6 h-6" />
+                      <span className="text-[10px] mt-1">Ekle</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Upload Buttons (when no images) */}
+              {totalImages === 0 && (
                 <div className="grid grid-cols-2 gap-3">
                   {/* Kamera Butonu */}
                   <button
@@ -245,20 +383,12 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                     <Camera className={`w-8 h-8 mb-2 transition-colors group-hover:text-safety-orange ${
                       isDark ? 'text-concrete-400' : 'text-gray-400'
                     }`} />
-                    <span className={`text-sm font-medium transition-colors group-hover:text-gray-200 ${
+                    <span className={`text-sm font-medium transition-colors group-hover:text-safety-orange ${
                       isDark ? 'text-concrete-400' : 'text-gray-500'
                     }`}>
                       Fotoğraf Çek
                     </span>
                   </button>
-                  <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleImageSelect}
-                    className="hidden"
-                  />
 
                   {/* Yükle Butonu */}
                   <button
@@ -273,26 +403,37 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                     <Upload className={`w-8 h-8 mb-2 transition-colors group-hover:text-safety-orange ${
                       isDark ? 'text-concrete-400' : 'text-gray-400'
                     }`} />
-                    <span className={`text-sm font-medium transition-colors group-hover:text-gray-200 ${
+                    <span className={`text-sm font-medium transition-colors group-hover:text-safety-orange ${
                       isDark ? 'text-concrete-400' : 'text-gray-500'
                     }`}>
                       Resim Yükle
                     </span>
                   </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageSelect}
-                    className="hidden"
-                  />
                 </div>
               )}
+
+              {/* Hidden file inputs */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
 
               {/* Resim Bilgisi */}
               <p className={`text-xs mt-2 flex items-center gap-1 ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
                 <ImageIcon className="w-3.5 h-3.5" />
-                Saha sorununun fotoğrafını çekin veya yükleyin
+                Birden fazla fotoğraf seçebilirsiniz (max 10, her biri max 10MB)
               </p>
             </div>
 

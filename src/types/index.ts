@@ -83,7 +83,10 @@ export interface Note {
   userId: string;
   userEmail: string;
   userName: string;
-  imageUrl: string;
+  // Multi-image support (new)
+  imageUrls: string[];
+  // Legacy single image field (for backward compatibility)
+  imageUrl?: string;
   title: string;
   content: string;
   projectName: string;
@@ -97,6 +100,17 @@ export interface Note {
   updatedAt?: Timestamp;
 }
 
+// Helper function to get images array with backward compatibility
+export const getNoteImages = (note: Note): string[] => {
+  if (note.imageUrls && note.imageUrls.length > 0) {
+    return note.imageUrls;
+  }
+  if (note.imageUrl) {
+    return [note.imageUrl];
+  }
+  return [];
+};
+
 export interface NoteFormData {
   title: string;
   content: string;
@@ -104,7 +118,14 @@ export interface NoteFormData {
   ada: string;
   parsel: string;
   customFields: CustomField[];
-  image: File | null;
+  images: File[];  // Changed from single image to array
+}
+
+// Upload progress tracking
+export interface UploadProgress {
+  current: number;
+  total: number;
+  percentage: number;
 }
 
 export interface FilterOptions {

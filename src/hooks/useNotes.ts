@@ -18,7 +18,7 @@ import {
   deleteObject
 } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
-import { Note, NoteFormData, FilterOptions, NoteStatus } from '../types';
+import { Note, NoteFormData, FilterOptions, NoteStatus, UploadProgress } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 export const useNotes = () => {
@@ -26,6 +26,7 @@ export const useNotes = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const { currentUser, userProfile, isAdmin } = useAuth();
 
   // Fetch notes based on user role
@@ -79,7 +80,7 @@ export const useNotes = () => {
     return () => unsubscribe();
   }, [currentUser, userProfile, isAdmin]);
 
-  // Upload image to Firebase Storage
+  // Upload single image to Firebase Storage
   const uploadImage = async (file: File): Promise<string> => {
     const timestamp = Date.now();
     const fileName = `${currentUser?.uid}/${timestamp}_${file.name}`;
@@ -89,6 +90,27 @@ export const useNotes = () => {
     const downloadUrl = await getDownloadURL(storageRef);
     
     return downloadUrl;
+  };
+
+  // Upload multiple images with progress tracking
+  const uploadImages = async (files: File[]): Promise<string[]> => {
+    if (files.length === 0) return [];
+
+    const urls: string[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgress({
+        current: i + 1,
+        total: files.length,
+        percentage: Math.round(((i + 1) / files.length) * 100)
+      });
+      
+      const url = await uploadImage(files[i]);
+      urls.push(url);
+    }
+    
+    setUploadProgress(null);
+    return urls;
   };
 
   // Delete image from Firebase Storage
@@ -101,6 +123,11 @@ export const useNotes = () => {
     }
   };
 
+  // Delete multiple images
+  const deleteImages = async (imageUrls: string[]): Promise<void> => {
+    await Promise.all(imageUrls.map(url => deleteImage(url)));
+  };
+
   // Create a new note
   const createNote = async (formData: NoteFormData): Promise<void> => {
     if (!currentUser || !userProfile) {
@@ -111,17 +138,14 @@ export const useNotes = () => {
     setError(null);
 
     try {
-      let imageUrl = '';
-
-      if (formData.image) {
-        imageUrl = await uploadImage(formData.image);
-      }
+      // Upload all images
+      const imageUrls = await uploadImages(formData.images || []);
 
       const noteData = {
         userId: currentUser.uid,
         userEmail: currentUser.email || '',
         userName: userProfile.displayName,
-        imageUrl,
+        imageUrls,  // New array field
         title: formData.title,
         content: formData.content,
         projectName: formData.projectName,
@@ -139,11 +163,12 @@ export const useNotes = () => {
       throw err;
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
   // Update an existing note
-  const updateNote = async (noteId: string, formData: Partial<NoteFormData>, newImage?: File): Promise<void> => {
+  const updateNote = async (noteId: string, formData: Partial<NoteFormData>, newImages?: File[]): Promise<void> => {
     if (!currentUser) {
       throw new Error('User not authenticated');
     }
@@ -158,14 +183,14 @@ export const useNotes = () => {
         updatedAt: Timestamp.now()
       };
 
-      // Handle new image upload if provided
-      if (newImage) {
-        const imageUrl = await uploadImage(newImage);
-        updateData.imageUrl = imageUrl;
+      // Handle new images upload if provided
+      if (newImages && newImages.length > 0) {
+        const imageUrls = await uploadImages(newImages);
+        updateData.imageUrls = imageUrls;
       }
 
-      // Remove image field if it exists (we use imageUrl)
-      delete updateData.image;
+      // Remove images field if it exists (we use imageUrls)
+      delete updateData.images;
 
       await updateDoc(noteRef, updateData);
     } catch (err) {
@@ -174,6 +199,7 @@ export const useNotes = () => {
       throw err;
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -186,9 +212,18 @@ export const useNotes = () => {
     setError(null);
 
     try {
-      // Delete associated image if exists
+      // Delete all associated images (both new and legacy)
+      const imagesToDelete: string[] = [];
+      
+      if (note.imageUrls && note.imageUrls.length > 0) {
+        imagesToDelete.push(...note.imageUrls);
+      }
       if (note.imageUrl) {
-        await deleteImage(note.imageUrl);
+        imagesToDelete.push(note.imageUrl);
+      }
+      
+      if (imagesToDelete.length > 0) {
+        await deleteImages(imagesToDelete);
       }
 
       // Delete the note document
@@ -287,6 +322,7 @@ export const useNotes = () => {
     loading,
     error,
     uploading,
+    uploadProgress,
     createNote,
     updateNote,
     deleteNote,

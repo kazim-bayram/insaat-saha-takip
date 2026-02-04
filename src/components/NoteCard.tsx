@@ -11,10 +11,11 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  Loader2
+  Loader2,
+  Layers
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages } from '../types';
 
 interface NoteCardProps {
   note: Note;
@@ -54,6 +55,9 @@ const NoteCard: React.FC<NoteCardProps> = ({
   // Current status config
   const currentStatus = note.status || 'open';
   const statusConfig = NOTE_STATUS_CONFIG[currentStatus];
+
+  // Get images array with backward compatibility
+  const images = getNoteImages(note);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -147,16 +151,76 @@ const NoteCard: React.FC<NoteCardProps> = ({
       }`}
     >
       {/* Resim Bölümü */}
-      {note.imageUrl ? (
-        <div className={`relative aspect-video overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
-          <img
-            src={note.imageUrl}
-            alt={note.title}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
-          />
+      {images.length > 0 ? (
+        <div className={`relative overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
+          {/* Single Image - Full Width */}
+          {images.length === 1 && (
+            <div className="aspect-video">
+              <img
+                src={images[0]}
+                alt={note.title}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+            </div>
+          )}
+          
+          {/* 2 Images - Side by Side */}
+          {images.length === 2 && (
+            <div className="aspect-video grid grid-cols-2 gap-0.5">
+              {images.map((url, idx) => (
+                <img
+                  key={idx}
+                  src={url}
+                  alt={`${note.title} ${idx + 1}`}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
+          
+          {/* 3+ Images - Grid Layout */}
+          {images.length >= 3 && (
+            <div className="aspect-video grid grid-cols-2 grid-rows-2 gap-0.5">
+              <img
+                src={images[0]}
+                alt={`${note.title} 1`}
+                className="w-full h-full object-cover row-span-2 transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+              <img
+                src={images[1]}
+                alt={`${note.title} 2`}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+              <div className="relative">
+                <img
+                  src={images[2]}
+                  alt={`${note.title} 3`}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="lazy"
+                />
+                {images.length > 3 && (
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                    <span className="text-white font-semibold text-lg">+{images.length - 3}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Gradient Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          
+          {/* Image Count Badge (if multiple) */}
+          {images.length > 1 && (
+            <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-1 bg-black/60 rounded-full text-white text-xs">
+              <Layers className="w-3 h-3" />
+              {images.length}
+            </div>
+          )}
           
           {/* Status Badge on Image */}
           <div className="absolute top-2 right-2">

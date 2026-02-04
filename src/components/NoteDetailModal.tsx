@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Calendar,
@@ -13,10 +13,13 @@ import {
   Clock,
   Loader2,
   CheckCircle2,
-  XCircle
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  Layers
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages } from '../types';
 
 interface NoteDetailModalProps {
   note: Note | null;
@@ -26,8 +29,13 @@ interface NoteDetailModalProps {
 
 const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose }) => {
   const { isDark } = useTheme();
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [showLightbox, setShowLightbox] = useState(false);
   
   if (!isOpen || !note) return null;
+
+  // Get images array with backward compatibility
+  const images = getNoteImages(note);
 
   // Status config
   const currentStatus = note.status || 'open';
@@ -59,10 +67,25 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
     minute: '2-digit'
   });
 
-  const handleDownloadImage = () => {
-    if (note.imageUrl) {
-      window.open(note.imageUrl, '_blank');
-    }
+  const handleDownloadImage = (url: string) => {
+    window.open(url, '_blank');
+  };
+
+  const openLightbox = (index: number) => {
+    setSelectedImageIndex(index);
+    setShowLightbox(true);
+  };
+
+  const closeLightbox = () => {
+    setShowLightbox(false);
+  };
+
+  const goToPrevImage = () => {
+    setSelectedImageIndex(prev => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const goToNextImage = () => {
+    setSelectedImageIndex(prev => (prev === images.length - 1 ? 0 : prev + 1));
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -116,32 +139,83 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
             {/* Resim Bölümü */}
             <div className="space-y-4">
-              {note.imageUrl ? (
-                <div className={`relative rounded-xl overflow-hidden group ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
-                  <img
-                    src={note.imageUrl}
-                    alt={note.title}
-                    className="w-full h-auto max-h-[400px] object-contain"
-                  />
-                  {/* Resim Aksiyonları */}
-                  <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={handleDownloadImage}
-                      className="p-2 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg transition-colors"
-                      title="Yeni sekmede aç"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
-                    <a
-                      href={note.imageUrl}
-                      download
-                      className="p-2 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg transition-colors"
-                      title="Resmi indir"
-                    >
-                      <Download className="w-4 h-4" />
-                    </a>
+              {images.length > 0 ? (
+                <>
+                  {/* Main Image Display */}
+                  <div 
+                    className={`relative rounded-xl overflow-hidden group cursor-pointer ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}
+                    onClick={() => openLightbox(selectedImageIndex)}
+                  >
+                    <img
+                      src={images[selectedImageIndex]}
+                      alt={`${note.title} ${selectedImageIndex + 1}`}
+                      className="w-full h-auto max-h-[400px] object-contain"
+                    />
+                    
+                    {/* Image counter badge */}
+                    {images.length > 1 && (
+                      <div className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 bg-black/60 rounded-full text-white text-sm">
+                        <Layers className="w-4 h-4" />
+                        {selectedImageIndex + 1} / {images.length}
+                      </div>
+                    )}
+
+                    {/* Resim Aksiyonları */}
+                    <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadImage(images[selectedImageIndex]);
+                        }}
+                        className="p-2 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg transition-colors"
+                        title="Yeni sekmede aç"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                      <a
+                        href={images[selectedImageIndex]}
+                        download
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-2 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg transition-colors"
+                        title="Resmi indir"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    </div>
+
+                    {/* Click hint */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                      <span className="px-4 py-2 bg-black/60 rounded-lg text-white text-sm">
+                        Büyütmek için tıklayın
+                      </span>
+                    </div>
                   </div>
-                </div>
+
+                  {/* Thumbnail Strip (if multiple images) */}
+                  {images.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                      {images.map((url, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedImageIndex(idx)}
+                          className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                            idx === selectedImageIndex
+                              ? 'border-safety-orange ring-2 ring-safety-orange/30'
+                              : isDark 
+                                ? 'border-slate-600 hover:border-slate-500' 
+                                : 'border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          <img
+                            src={url}
+                            alt={`Thumbnail ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className={`aspect-video rounded-xl flex items-center justify-center ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
                   <div className={`text-center ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
@@ -271,6 +345,113 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
           </div>
         </div>
       </div>
+
+      {/* Lightbox */}
+      {showLightbox && images.length > 0 && (
+        <div 
+          className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center"
+          onClick={closeLightbox}
+        >
+          {/* Close Button */}
+          <button
+            onClick={closeLightbox}
+            className="absolute top-4 right-4 p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors z-10"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          {/* Image Counter */}
+          {images.length > 1 && (
+            <div className="absolute top-4 left-4 flex items-center gap-2 px-4 py-2 bg-black/60 rounded-full text-white">
+              <Layers className="w-5 h-5" />
+              {selectedImageIndex + 1} / {images.length}
+            </div>
+          )}
+
+          {/* Navigation - Previous */}
+          {images.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                goToPrevImage();
+              }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+            >
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+          )}
+
+          {/* Main Image */}
+          <img
+            src={images[selectedImageIndex]}
+            alt={`${note.title} ${selectedImageIndex + 1}`}
+            className="max-w-[90vw] max-h-[90vh] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+
+          {/* Navigation - Next */}
+          {images.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                goToNextImage();
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+            >
+              <ChevronRight className="w-8 h-8" />
+            </button>
+          )}
+
+          {/* Thumbnail Navigation */}
+          {images.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 p-2 bg-black/60 rounded-xl">
+              {images.map((url, idx) => (
+                <button
+                  key={idx}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedImageIndex(idx);
+                  }}
+                  className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${
+                    idx === selectedImageIndex
+                      ? 'border-white ring-2 ring-white/30'
+                      : 'border-white/30 hover:border-white/60'
+                  }`}
+                >
+                  <img
+                    src={url}
+                    alt={`Thumbnail ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="absolute bottom-4 right-4 flex gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownloadImage(images[selectedImageIndex]);
+              }}
+              className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+              title="Yeni sekmede aç"
+            >
+              <ExternalLink className="w-5 h-5" />
+            </button>
+            <a
+              href={images[selectedImageIndex]}
+              download
+              onClick={(e) => e.stopPropagation()}
+              className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+              title="Resmi indir"
+            >
+              <Download className="w-5 h-5" />
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
