@@ -9,7 +9,8 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  Timestamp
+  Timestamp,
+  arrayUnion
 } from 'firebase/firestore';
 import {
   ref,
@@ -340,11 +341,6 @@ export const useNotes = () => {
 
     try {
       const noteRef = doc(db, 'notes', noteId);
-      const note = notes.find(n => n.id === noteId);
-      
-      if (!note) {
-        throw new Error('Note not found');
-      }
 
       const newComment: Comment = {
         id: generateId(),
@@ -353,13 +349,11 @@ export const useNotes = () => {
         authorEmail: currentUser.email || '',
         text: text.trim(),
         role: userProfile.role,
-        createdAt: Timestamp.now()
+        createdAt: Date.now()
       };
 
-      const existingComments = note.comments || [];
-      
       await updateDoc(noteRef, {
-        comments: [...existingComments, newComment],
+        comments: arrayUnion(newComment),
         updatedAt: Timestamp.now()
       });
 

@@ -148,7 +148,16 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
 
   const formatCommentTime = (timestamp: any) => {
     if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const date = timestamp?.toDate
+      ? timestamp.toDate()
+      : timestamp instanceof Date
+        ? timestamp
+        : new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
     return date.toLocaleDateString('tr-TR', {
       day: 'numeric',
       month: 'short',

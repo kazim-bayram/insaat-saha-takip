@@ -149,7 +149,7 @@ export interface Comment {
   authorEmail: string;
   text: string;
   role: UserRole;
-  createdAt: Timestamp;
+  createdAt: Timestamp | Date | string | number | null;
 }
 
 // Notification system
