@@ -219,53 +219,7 @@ const Login: React.FC = () => {
               </div>
             )}
 
-            {/* Kullanıcı Adı (Sadece Kayıt) */}
-            {isRegister && (
-              <div className="animate-slide-up">
-                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                  Kullanıcı Adı
-                </label>
-                <div className="relative">
-                  <AtSign className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => handleUsernameChange(e.target.value.toLowerCase())}
-                    placeholder="ahmet_yilmaz"
-                    className={`w-full rounded-xl pl-12 pr-12 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                    } ${usernameStatus === 'taken' ? 'border-red-500' : ''} ${usernameStatus === 'available' ? 'border-green-500' : ''}`}
-                    required={isRegister}
-                    minLength={3}
-                  />
-                  {/* Username status indicator */}
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    {usernameStatus === 'checking' && (
-                      <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
-                    )}
-                    {usernameStatus === 'available' && (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    )}
-                    {usernameStatus === 'taken' && (
-                      <XCircle className="w-5 h-5 text-red-500" />
-                    )}
-                  </div>
-                </div>
-                {usernameStatus === 'taken' && (
-                  <p className="text-red-400 text-xs mt-1">Bu kullanıcı adı zaten kullanılıyor</p>
-                )}
-                {usernameStatus === 'available' && (
-                  <p className="text-green-400 text-xs mt-1">Kullanıcı adı müsait</p>
-                )}
-                <p className={`text-xs mt-1 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
-                  Sadece harf, rakam ve alt çizgi (_) kullanabilirsiniz
-                </p>
-              </div>
-            )}
-
-            {/* Kullanıcı Adı (Giriş ve Kayıt) */}
+            {/* Kullanıcı Adı */}
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
                 Kullanıcı Adı
