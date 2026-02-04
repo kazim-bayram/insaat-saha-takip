@@ -76,12 +76,15 @@ const Login: React.FC = () => {
         try {
           await register(username, password, displayName);
         } catch (registerErr: any) {
+          console.error('Registration error:', registerErr);
+          
           // Check if it's a Firestore permission error
           if (registerErr.message?.includes('permission') || 
               registerErr.message?.includes('PERMISSION_DENIED') ||
-              registerErr.code === 'permission-denied') {
+              registerErr.code === 'permission-denied' ||
+              registerErr.code === 'PERMISSION_DENIED') {
             throw new Error(
-              'Hesap oluşturuldu ancak profil kaydedilemedi. Lütfen yönetici ile iletişime geçin.'
+              'Profil kaydedilemedi. Firestore kuralları güncellenmeli. Hata: ' + (registerErr.message || registerErr.code)
             );
           }
           throw registerErr;

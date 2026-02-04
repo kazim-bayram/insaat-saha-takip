@@ -141,23 +141,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Register function with username (automatically generates @insaat.local email)
   const register = async (username: string, password: string, displayName: string, role: UserRole = 'worker'): Promise<void> => {
-    // Check username availability first
-    const isAvailable = await checkUsernameAvailable(username);
-    if (!isAvailable) {
-      throw new Error('Bu kullanıcı adı zaten kullanılıyor');
-    }
-    
     // Generate email from username
     const email = `${username.toLowerCase()}@insaat.local`;
     
+    // Skip pre-check for username availability - Firebase Auth will reject duplicate emails
+    // The email is derived from username, so if username is taken, email will also be taken
+    // This avoids permission issues with unauthenticated Firestore queries
+    
+    // Create the auth user first
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     
-    // Update display name in Firebase Auth
-    await updateProfile(userCredential.user, { displayName });
-    
-    // Create user profile in Firestore with username and isActive: true
-    const profile = await createUserProfile(userCredential.user, displayName, username, role);
-    setUserProfile(profile);
+    try {
+      // Update display name in Firebase Auth
+      await updateProfile(userCredential.user, { displayName });
+      
+      // Create user profile in Firestore with username and isActive: true
+      const profile = await createUserProfile(userCredential.user, displayName, username, role);
+      setUserProfile(profile);
+    } catch (profileError: any) {
+      // If profile creation fails, delete the auth user to keep things consistent
+      console.error('Profile creation failed:', profileError);
+      try {
+        await userCredential.user.delete();
+      } catch (deleteError) {
+        console.error('Failed to cleanup auth user:', deleteError);
+      }
+      throw profileError;
+    }
   };
 
   // Logout function
