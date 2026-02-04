@@ -23,4 +23,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
+// Export config for secondary app creation (admin user creation)
+export { firebaseConfig };
+
 export default app;

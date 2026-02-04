@@ -62,7 +62,20 @@ const Login: React.FC = () => {
         if (usernameStatus === 'taken') {
           throw new Error('Bu kullanıcı adı zaten kullanılıyor');
         }
-        await register(email, password, displayName, username);
+        
+        try {
+          await register(email, password, displayName, username);
+        } catch (registerErr: any) {
+          // Check if it's a Firestore permission error
+          if (registerErr.message?.includes('permission') || 
+              registerErr.message?.includes('PERMISSION_DENIED') ||
+              registerErr.code === 'permission-denied') {
+            throw new Error(
+              'Hesap oluşturuldu ancak profil kaydedilemedi. Lütfen yönetici ile iletişime geçin.'
+            );
+          }
+          throw registerErr;
+        }
       } else {
         // Smart login - email OR username
         await login(emailOrUsername, password);
