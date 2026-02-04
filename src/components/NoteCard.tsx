@@ -8,6 +8,7 @@ import {
   ImageIcon,
   MapPin,
   ChevronDown,
+  ChevronUp,
   Clock,
   CheckCircle2,
   XCircle,
@@ -46,6 +47,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
   const { isDark } = useTheme();
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const formattedDate = note.createdAt.toDate().toLocaleDateString('tr-TR', {
@@ -424,22 +426,51 @@ const NoteCard: React.FC<NoteCardProps> = ({
           )}
         </div>
 
-        {/* Yorum Sayısı & Aksiyon Butonları */}
-        <div className={`flex items-center justify-between mt-4 pt-3 border-t ${
-          isDark ? 'border-slate-700/50' : 'border-gray-200'
-        }`}>
-          {/* Comment Count */}
-          <div className="flex items-center gap-2">
-            {(commentCount !== undefined && commentCount > 0) && (
-              <div className={`flex items-center gap-1.5 text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>{commentCount} yorum</span>
-              </div>
+        {/* Tartışma Butonu (Eğer yorum varsa) */}
+        {commentCount !== undefined && commentCount > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowComments(!showComments);
+            }}
+            className={`w-full flex items-center justify-between mt-4 pt-3 px-2 py-2 rounded-lg border-t transition-colors ${
+              isDark 
+                ? 'border-slate-700/50 hover:bg-slate-800/50' 
+                : 'border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <MessageSquare className={`w-4 h-4 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`} />
+              <span className={`text-sm font-medium ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Tartışma / Yorumlar ({commentCount})
+              </span>
+            </div>
+            {showComments ? (
+              <ChevronUp className={`w-4 h-4 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`} />
+            ) : (
+              <ChevronDown className={`w-4 h-4 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`} />
             )}
-          </div>
+          </button>
+        )}
 
-          {/* Action Buttons */}
-          <div className={`flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity`}>
+        {/* Comments Preview (Collapsible) */}
+        {showComments && commentCount && commentCount > 0 && (
+          <div className={`mt-2 p-3 rounded-lg border ${
+            isDark 
+              ? 'bg-slate-800/30 border-slate-700/50' 
+              : 'bg-gray-50 border-gray-200'
+          }`}>
+            <p className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+              {commentCount} yorum var. Tüm yorumları görmek ve yanıtlamak için karta tıklayın.
+            </p>
+          </div>
+        )}
+
+        {/* Aksiyon Butonları */}
+        {(canEdit || canDelete) && (
+          <div className={`flex items-center gap-2 mt-4 pt-3 border-t opacity-0 group-hover:opacity-100 transition-opacity ${
+            isDark ? 'border-slate-700/50' : 'border-gray-200'
+          }`}>
             {canEdit && onEdit && (
               <button
                 onClick={handleEdit}
@@ -463,7 +494,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
               </button>
             )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

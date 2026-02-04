@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   Plus,
-  LogOut,
   Filter,
   X,
   Calendar,
@@ -18,9 +17,7 @@ import {
   Clock,
   CheckCircle2,
   Users,
-  BarChart3,
-  Settings,
-  UserCog
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -33,6 +30,7 @@ import AddNoteModal from './AddNoteModal';
 import NotificationDropdown from './NotificationDropdown';
 import ProfileSettings from './ProfileSettings';
 import UserManagement from './UserManagement';
+import UserProfileMenu from './UserProfileMenu';
 import LoadingSpinner, { NotesGridSkeleton } from './LoadingSpinner';
 
 const Dashboard: React.FC = () => {
@@ -305,34 +303,6 @@ const Dashboard: React.FC = () => {
                 onNotificationClick={handleNotificationClick}
               />
 
-              {/* Kullanıcı Yönetimi (Sadece Admin) */}
-              {isAdmin && (
-                <button
-                  onClick={() => setShowUserManagement(true)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    isDark 
-                      ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                  }`}
-                  title="Kullanıcı Yönetimi"
-                >
-                  <UserCog className="w-5 h-5" />
-                </button>
-              )}
-
-              {/* Profil Ayarları */}
-              <button
-                onClick={() => setShowProfileSettings(true)}
-                className={`p-2 rounded-lg transition-colors ${
-                  isDark 
-                    ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-                title="Profil Ayarları"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-
               {/* Tema Değiştirici */}
               <button
                 onClick={toggleTheme}
@@ -346,44 +316,12 @@ const Dashboard: React.FC = () => {
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
 
-              {/* Kullanıcı Rozeti */}
-              <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg ${
-                isDark ? 'bg-slate-700/50' : 'bg-gray-100'
-              }`}>
-                <User className={`w-4 h-4 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`} />
-                <div className="flex flex-col">
-                  <span className={`text-sm font-medium ${isDark ? 'text-concrete-200' : 'text-gray-700'}`}>
-                    {userProfile?.displayName}
-                  </span>
-                  {userProfile?.username && (
-                    <span className={`text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
-                      @{userProfile.username}
-                    </span>
-                  )}
-                </div>
-                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                  isAdmin 
-                    ? 'bg-safety-orange/20 text-safety-orange' 
-                    : isDark 
-                      ? 'bg-steel-600/20 text-steel-300' 
-                      : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {isAdmin ? 'Yönetici' : 'Çalışan'}
-                </span>
-              </div>
-
-              {/* Çıkış Butonu */}
-              <button
-                onClick={handleLogout}
-                className={`p-2 rounded-lg transition-colors ${
-                  isDark 
-                    ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-                title="Çıkış Yap"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+              {/* User Profile Menu */}
+              <UserProfileMenu
+                onOpenProfileSettings={() => setShowProfileSettings(true)}
+                onOpenUserManagement={() => setShowUserManagement(true)}
+                onLogout={handleLogout}
+              />
             </div>
           </div>
         </div>
