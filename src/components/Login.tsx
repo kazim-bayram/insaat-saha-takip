@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HardHat, Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon, AtSign, CheckCircle2, XCircle } from 'lucide-react';
+import { Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon, AtSign, CheckCircle2, XCircle } from 'lucide-react';
 import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -143,7 +143,6 @@ const Login: React.FC = () => {
     }`}>
       {/* Arka Plan Deseni */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-2 safety-tape opacity-60" />
         <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full blur-3xl ${
           isDark ? 'bg-safety-orange/10' : 'bg-safety-orange/20'
         }`} />
@@ -169,14 +168,31 @@ const Login: React.FC = () => {
         {/* Logo & Başlık */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-safety-orange to-safety-orange-dark rounded-2xl shadow-industrial-lg mb-4">
-            <HardHat className="w-10 h-10 text-white" />
+            {/* Construction Plan / Map / Parcel Icon */}
+            <svg 
+              className="w-10 h-10 text-white" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="1.5" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              {/* Outer boundary */}
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              {/* Horizontal division lines (parcels) */}
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="3" y1="15" x2="21" y2="15" />
+              {/* Vertical division lines (parcels) */}
+              <line x1="9" y1="3" x2="9" y2="21" />
+              <line x1="15" y1="9" x2="15" y2="21" />
+              {/* Location marker */}
+              <circle cx="6" cy="6" r="1.5" fill="currentColor" />
+            </svg>
           </div>
-          <h1 className={`text-3xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            SahaNot
+          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Saha Takip
           </h1>
-          <p className={isDark ? 'text-concrete-400' : 'text-gray-500'}>
-            Şantiye Saha Takip Uygulaması
-          </p>
         </div>
 
         {/* Giriş Kartı */}
@@ -409,11 +425,6 @@ const Login: React.FC = () => {
             </p>
           </div>
         </div>
-
-        {/* Alt Yazı */}
-        <p className={`text-center text-sm mt-6 ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
-          Saha Belgeleme Sitesi.
-        </p>
       </div>
     </div>
   );

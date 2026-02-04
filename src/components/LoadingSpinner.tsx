@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, HardHat } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface LoadingSpinnerProps {
@@ -28,7 +28,23 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       }`}>
         <div className="relative">
           <div className="w-20 h-20 bg-gradient-to-br from-safety-orange to-safety-orange-dark rounded-2xl flex items-center justify-center animate-pulse-slow">
-            <HardHat className="w-10 h-10 text-white" />
+            {/* Construction Plan / Map / Parcel Icon */}
+            <svg 
+              className="w-10 h-10 text-white" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="1.5" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="3" y1="15" x2="21" y2="15" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+              <line x1="15" y1="9" x2="15" y2="21" />
+              <circle cx="6" cy="6" r="1.5" fill="currentColor" />
+            </svg>
           </div>
           <div className="absolute -bottom-2 -right-2">
             <Loader2 className="w-8 h-8 text-safety-orange animate-spin" />

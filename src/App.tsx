@@ -9,7 +9,7 @@ const App: React.FC = () => {
 
   // Yükleniyor durumunu kontrol et
   if (loading) {
-    return <LoadingSpinner fullScreen message="SahaNot yükleniyor..." />;
+    return <LoadingSpinner fullScreen message="Saha Takip yükleniyor..." />;
   }
 
   // Giriş yapılmadıysa login ekranını göster

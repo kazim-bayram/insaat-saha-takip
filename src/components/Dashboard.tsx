@@ -7,7 +7,6 @@ import {
   User,
   LayoutGrid,
   List,
-  HardHat,
   FileText,
   ChevronDown,
   ChevronUp,
@@ -240,10 +239,26 @@ const Dashboard: React.FC = () => {
             {/* Logo & Başlık */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-safety-orange to-safety-orange-dark rounded-xl flex items-center justify-center">
-                <HardHat className="w-5 h-5 text-white" />
+                {/* Construction Plan / Map / Parcel Icon */}
+                <svg 
+                  className="w-5 h-5 text-white" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="1.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="3" y1="15" x2="21" y2="15" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                  <line x1="15" y1="9" x2="15" y2="21" />
+                  <circle cx="6" cy="6" r="1.5" fill="currentColor" />
+                </svg>
               </div>
               <div className="hidden sm:block">
-                <h1 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>SahaNot</h1>
+                <h1 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Saha Takip</h1>
                 <p className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
                   {isAdmin ? 'Yönetici Paneli' : 'Saha Notları'}
                 </p>
