@@ -18,7 +18,7 @@ import {
   deleteObject
 } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
-import { Note, NoteFormData, FilterOptions } from '../types';
+import { Note, NoteFormData, FilterOptions, NoteStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 export const useNotes = () => {
@@ -128,6 +128,7 @@ export const useNotes = () => {
         ada: formData.ada || '',
         parsel: formData.parsel || '',
         customFields: formData.customFields || [],
+        status: 'open' as NoteStatus,  // Default status
         createdAt: Timestamp.now()
       };
 
@@ -247,6 +248,40 @@ export const useNotes = () => {
     return Array.from(emails).sort();
   }, [notes]);
 
+  // Update note status (Admin only)
+  const updateNoteStatus = async (noteId: string, newStatus: NoteStatus): Promise<void> => {
+    if (!currentUser || !isAdmin) {
+      throw new Error('Unauthorized: Only admins can change status');
+    }
+
+    try {
+      const noteRef = doc(db, 'notes', noteId);
+      await updateDoc(noteRef, {
+        status: newStatus,
+        updatedAt: Timestamp.now()
+      });
+    } catch (err) {
+      console.error('Error updating note status:', err);
+      setError('Failed to update status. Please try again.');
+      throw err;
+    }
+  };
+
+  // Get KPI statistics
+  const getKPIStats = useCallback(() => {
+    const totalNotes = notes.length;
+    const pendingIssues = notes.filter(note => (note.status || 'open') === 'open').length;
+    const resolvedIssues = notes.filter(note => note.status === 'resolved').length;
+    const activeWorkers = new Set(notes.map(note => note.userId)).size;
+
+    return {
+      totalNotes,
+      pendingIssues,
+      resolvedIssues,
+      activeWorkers
+    };
+  }, [notes]);
+
   return {
     notes,
     loading,
@@ -255,8 +290,10 @@ export const useNotes = () => {
     createNote,
     updateNote,
     deleteNote,
+    updateNoteStatus,
     filterNotes,
     getProjectNames,
-    getWorkerEmails
+    getWorkerEmails,
+    getKPIStats
   };
 };

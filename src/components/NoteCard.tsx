@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Calendar, 
   FolderOpen, 
@@ -6,17 +6,24 @@ import {
   Trash2, 
   Edit3,
   ImageIcon,
-  MapPin
+  MapPin,
+  ChevronDown,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Loader2
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG } from '../types';
 
 interface NoteCardProps {
   note: Note;
   onClick: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onStatusChange?: (noteId: string, newStatus: NoteStatus) => Promise<void>;
   showWorkerInfo?: boolean;
+  isAdmin?: boolean;
 }
 
 const NoteCard: React.FC<NoteCardProps> = ({ 
@@ -24,9 +31,14 @@ const NoteCard: React.FC<NoteCardProps> = ({
   onClick, 
   onEdit, 
   onDelete,
-  showWorkerInfo = false 
+  onStatusChange,
+  showWorkerInfo = false,
+  isAdmin = false
 }) => {
   const { isDark } = useTheme();
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
   const formattedDate = note.createdAt.toDate().toLocaleDateString('tr-TR', {
     day: 'numeric',
@@ -38,6 +50,22 @@ const NoteCard: React.FC<NoteCardProps> = ({
     hour: '2-digit',
     minute: '2-digit'
   });
+
+  // Current status config
+  const currentStatus = note.status || 'open';
+  const statusConfig = NOTE_STATUS_CONFIG[currentStatus];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowStatusDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -51,13 +79,71 @@ const NoteCard: React.FC<NoteCardProps> = ({
     }
   };
 
+  const handleStatusClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isAdmin && onStatusChange) {
+      setShowStatusDropdown(!showStatusDropdown);
+    }
+  };
+
+  const handleStatusChange = async (e: React.MouseEvent, newStatus: NoteStatus) => {
+    e.stopPropagation();
+    if (!onStatusChange || newStatus === currentStatus) {
+      setShowStatusDropdown(false);
+      return;
+    }
+
+    setUpdatingStatus(true);
+    try {
+      await onStatusChange(note.id, newStatus);
+    } catch (err) {
+      console.error('Status update failed:', err);
+    } finally {
+      setUpdatingStatus(false);
+      setShowStatusDropdown(false);
+    }
+  };
+
+  // Get status icon
+  const getStatusIcon = (status: NoteStatus) => {
+    switch (status) {
+      case 'open':
+        return <Clock className="w-3.5 h-3.5" />;
+      case 'in_progress':
+        return <Loader2 className="w-3.5 h-3.5" />;
+      case 'resolved':
+        return <CheckCircle2 className="w-3.5 h-3.5" />;
+      case 'rejected':
+        return <XCircle className="w-3.5 h-3.5" />;
+    }
+  };
+
+  // Border color based on status
+  const getBorderClass = () => {
+    if (isDark) {
+      switch (currentStatus) {
+        case 'in_progress': return 'border-blue-600/50';
+        case 'resolved': return 'border-green-600/50';
+        case 'rejected': return 'border-red-600/50';
+        default: return 'border-slate-700/50';
+      }
+    } else {
+      switch (currentStatus) {
+        case 'in_progress': return 'border-blue-300';
+        case 'resolved': return 'border-green-300';
+        case 'rejected': return 'border-red-300';
+        default: return 'border-gray-200';
+      }
+    }
+  };
+
   return (
     <div
       onClick={onClick}
-      className={`group rounded-xl border overflow-hidden cursor-pointer card-hover ${
+      className={`group rounded-xl border-2 overflow-hidden cursor-pointer card-hover ${
         isDark 
-          ? 'bg-slate-850 border-slate-700/50' 
-          : 'bg-white border-gray-200 shadow-sm'
+          ? `bg-slate-850 ${getBorderClass()}` 
+          : `bg-white ${getBorderClass()} shadow-sm`
       }`}
     >
       {/* Resim Bölümü */}
@@ -71,10 +157,114 @@ const NoteCard: React.FC<NoteCardProps> = ({
           />
           {/* Gradient Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          
+          {/* Status Badge on Image */}
+          <div className="absolute top-2 right-2">
+            <div 
+              ref={dropdownRef}
+              className="relative"
+              onClick={handleStatusClick}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  isDark 
+                    ? `${statusConfig.bgDark} ${statusConfig.textDark}` 
+                    : `${statusConfig.bgLight} ${statusConfig.textLight}`
+                } ${isAdmin && onStatusChange ? 'cursor-pointer hover:opacity-80' : ''}`}
+              >
+                {updatingStatus ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  getStatusIcon(currentStatus)
+                )}
+                {statusConfig.label}
+                {isAdmin && onStatusChange && <ChevronDown className="w-3 h-3 ml-0.5" />}
+              </button>
+              
+              {/* Status Dropdown */}
+              {showStatusDropdown && isAdmin && (
+                <div className={`absolute top-full right-0 mt-1 py-1 rounded-lg shadow-lg border z-50 min-w-[140px] ${
+                  isDark 
+                    ? 'bg-slate-800 border-slate-600' 
+                    : 'bg-white border-gray-200'
+                }`}>
+                  {Object.values(NOTE_STATUS_CONFIG).map((config) => (
+                    <button
+                      key={config.key}
+                      onClick={(e) => handleStatusChange(e, config.key)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
+                        currentStatus === config.key 
+                          ? isDark ? 'bg-slate-700' : 'bg-gray-100'
+                          : isDark ? 'hover:bg-slate-700' : 'hover:bg-gray-50'
+                      } ${isDark ? config.textDark : config.textLight}`}
+                    >
+                      {getStatusIcon(config.key)}
+                      {config.label}
+                      {currentStatus === config.key && (
+                        <CheckCircle2 className="w-3 h-3 ml-auto" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
-        <div className={`aspect-video flex items-center justify-center ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
+        <div className={`aspect-video flex items-center justify-center relative ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
           <ImageIcon className={`w-12 h-12 ${isDark ? 'text-slate-600' : 'text-gray-300'}`} />
+          
+          {/* Status Badge when no Image */}
+          <div className="absolute top-2 right-2">
+            <div 
+              ref={dropdownRef}
+              className="relative"
+              onClick={handleStatusClick}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  isDark 
+                    ? `${statusConfig.bgDark} ${statusConfig.textDark}` 
+                    : `${statusConfig.bgLight} ${statusConfig.textLight}`
+                } ${isAdmin && onStatusChange ? 'cursor-pointer hover:opacity-80' : ''}`}
+              >
+                {updatingStatus ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  getStatusIcon(currentStatus)
+                )}
+                {statusConfig.label}
+                {isAdmin && onStatusChange && <ChevronDown className="w-3 h-3 ml-0.5" />}
+              </button>
+              
+              {/* Status Dropdown */}
+              {showStatusDropdown && isAdmin && (
+                <div className={`absolute top-full right-0 mt-1 py-1 rounded-lg shadow-lg border z-50 min-w-[140px] ${
+                  isDark 
+                    ? 'bg-slate-800 border-slate-600' 
+                    : 'bg-white border-gray-200'
+                }`}>
+                  {Object.values(NOTE_STATUS_CONFIG).map((config) => (
+                    <button
+                      key={config.key}
+                      onClick={(e) => handleStatusChange(e, config.key)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
+                        currentStatus === config.key 
+                          ? isDark ? 'bg-slate-700' : 'bg-gray-100'
+                          : isDark ? 'hover:bg-slate-700' : 'hover:bg-gray-50'
+                      } ${isDark ? config.textDark : config.textLight}`}
+                    >
+                      {getStatusIcon(config.key)}
+                      {config.label}
+                      {currentStatus === config.key && (
+                        <CheckCircle2 className="w-3 h-3 ml-auto" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

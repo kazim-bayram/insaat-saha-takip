@@ -9,10 +9,14 @@ import {
   ExternalLink,
   ImageIcon,
   MapPin,
-  Tag
+  Tag,
+  Clock,
+  Loader2,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG } from '../types';
 
 interface NoteDetailModalProps {
   note: Note | null;
@@ -24,6 +28,24 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
   const { isDark } = useTheme();
   
   if (!isOpen || !note) return null;
+
+  // Status config
+  const currentStatus = note.status || 'open';
+  const statusConfig = NOTE_STATUS_CONFIG[currentStatus];
+
+  // Get status icon
+  const getStatusIcon = (status: NoteStatus) => {
+    switch (status) {
+      case 'open':
+        return <Clock className="w-4 h-4" />;
+      case 'in_progress':
+        return <Loader2 className="w-4 h-4" />;
+      case 'resolved':
+        return <CheckCircle2 className="w-4 h-4" />;
+      case 'rejected':
+        return <XCircle className="w-4 h-4" />;
+    }
+  };
 
   const formattedDate = note.createdAt.toDate().toLocaleDateString('tr-TR', {
     weekday: 'long',
@@ -63,12 +85,23 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
         <div className={`flex items-center justify-between p-4 border-b ${
           isDark ? 'border-slate-700/50' : 'border-gray-200'
         }`}>
-          <h2 className={`text-xl font-semibold truncate pr-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            {note.title || 'Başlıksız Not'}
-          </h2>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <h2 className={`text-xl font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {note.title || 'Başlıksız Not'}
+            </h2>
+            {/* Status Badge */}
+            <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
+              isDark 
+                ? `${statusConfig.bgDark} ${statusConfig.textDark}` 
+                : `${statusConfig.bgLight} ${statusConfig.textLight}`
+            }`}>
+              {getStatusIcon(currentStatus)}
+              {statusConfig.label}
+            </span>
+          </div>
           <button
             onClick={onClose}
-            className={`p-2 rounded-lg transition-colors ${
+            className={`p-2 rounded-lg transition-colors ml-2 ${
               isDark 
                 ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
                 : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'

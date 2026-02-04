@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Plus,
   LogOut,
@@ -13,12 +13,17 @@ import {
   FileText,
   ChevronDown,
   Sun,
-  Moon
+  Moon,
+  Download,
+  Clock,
+  CheckCircle2,
+  Users,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotes } from '../hooks/useNotes';
-import { Note, FilterOptions } from '../types';
+import { Note, FilterOptions, NOTE_STATUS_CONFIG } from '../types';
 import NoteCard from './NoteCard';
 import NoteDetailModal from './NoteDetailModal';
 import AddNoteModal from './AddNoteModal';
@@ -35,9 +40,11 @@ const Dashboard: React.FC = () => {
     createNote,
     updateNote,
     deleteNote,
+    updateNoteStatus,
     filterNotes,
     getProjectNames,
-    getWorkerEmails
+    getWorkerEmails,
+    getKPIStats
   } = useNotes();
 
   // Modal durumları
@@ -67,6 +74,74 @@ const Dashboard: React.FC = () => {
   // Filtre dropdown'ları için benzersiz değerler
   const projectNames = useMemo(() => getProjectNames(), [getProjectNames]);
   const workerEmails = useMemo(() => getWorkerEmails(), [getWorkerEmails]);
+
+  // KPI statistics
+  const kpiStats = useMemo(() => getKPIStats(), [getKPIStats]);
+
+  // Export to CSV function
+  const exportToCSV = useCallback(() => {
+    // UTF-8 BOM for Turkish character support
+    const BOM = '\uFEFF';
+    
+    // CSV Headers
+    const headers = [
+      'Tarih',
+      'Proje Adı',
+      'Ada',
+      'Parsel',
+      'Çalışan Email',
+      'Açıklama',
+      'Durum',
+      'Resim URL'
+    ];
+
+    // Map status to Turkish labels
+    const getStatusLabel = (status: string) => {
+      return NOTE_STATUS_CONFIG[status as keyof typeof NOTE_STATUS_CONFIG]?.label || 'Beklemede';
+    };
+
+    // Convert notes to CSV rows
+    const rows = filteredNotes.map(note => {
+      const date = note.createdAt.toDate().toLocaleDateString('tr-TR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+      
+      // Escape special characters and wrap in quotes
+      const escapeCSV = (value: string) => {
+        if (!value) return '';
+        const escaped = value.replace(/"/g, '""');
+        return `"${escaped}"`;
+      };
+
+      return [
+        escapeCSV(date),
+        escapeCSV(note.projectName || ''),
+        escapeCSV(note.ada || ''),
+        escapeCSV(note.parsel || ''),
+        escapeCSV(note.userEmail || ''),
+        escapeCSV(note.content || ''),
+        escapeCSV(getStatusLabel(note.status || 'open')),
+        escapeCSV(note.imageUrl || '')
+      ].join(',');
+    });
+
+    // Combine headers and rows
+    const csvContent = BOM + headers.join(',') + '\n' + rows.join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `saha-notlari-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [filteredNotes]);
 
   const handleNoteClick = (note: Note) => {
     setSelectedNote(note);
@@ -195,6 +270,95 @@ const Dashboard: React.FC = () => {
 
       {/* Ana İçerik */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* KPI Özet Kartları (Sadece Yönetici) */}
+        {isAdmin && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {/* Toplam Not */}
+            <div className={`rounded-xl p-4 border ${
+              isDark 
+                ? 'bg-slate-850 border-slate-700/50' 
+                : 'bg-white border-gray-200 shadow-sm'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
+                  <BarChart3 className={`w-5 h-5 ${isDark ? 'text-concrete-300' : 'text-gray-600'}`} />
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                    Toplam Not
+                  </p>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {kpiStats.totalNotes}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bekleyen Sorunlar */}
+            <div className={`rounded-xl p-4 border ${
+              isDark 
+                ? 'bg-slate-850 border-slate-700/50' 
+                : 'bg-white border-gray-200 shadow-sm'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-yellow-600/20' : 'bg-yellow-100'}`}>
+                  <Clock className={`w-5 h-5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                    Beklemede
+                  </p>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                    {kpiStats.pendingIssues}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Çözülen Sorunlar */}
+            <div className={`rounded-xl p-4 border ${
+              isDark 
+                ? 'bg-slate-850 border-slate-700/50' 
+                : 'bg-white border-gray-200 shadow-sm'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-green-600/20' : 'bg-green-100'}`}>
+                  <CheckCircle2 className={`w-5 h-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                    Çözüldü
+                  </p>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                    {kpiStats.resolvedIssues}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Aktif Çalışanlar */}
+            <div className={`rounded-xl p-4 border ${
+              isDark 
+                ? 'bg-slate-850 border-slate-700/50' 
+                : 'bg-white border-gray-200 shadow-sm'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-blue-600/20' : 'bg-blue-100'}`}>
+                  <Users className={`w-5 h-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                    Aktif Çalışan
+                  </p>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                    {kpiStats.activeWorkers}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Araç Çubuğu */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           {/* İstatistikler */}
@@ -262,6 +426,22 @@ const Dashboard: React.FC = () => {
                 {hasActiveFilters && (
                   <span className="w-2 h-2 bg-safety-orange rounded-full" />
                 )}
+              </button>
+            )}
+
+            {/* Export Butonu (Sadece Yönetici) */}
+            {isAdmin && (
+              <button
+                onClick={exportToCSV}
+                disabled={filteredNotes.length === 0}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isDark 
+                    ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' 
+                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                }`}
+              >
+                <Download className="w-4 h-4" />
+                <span className="text-sm font-medium">Dışa Aktar</span>
               </button>
             )}
           </div>
@@ -415,7 +595,9 @@ const Dashboard: React.FC = () => {
                 onClick={() => handleNoteClick(note)}
                 onEdit={!isAdmin ? () => handleEditNote(note) : undefined}
                 onDelete={!isAdmin ? () => handleDeleteNote(note) : undefined}
+                onStatusChange={isAdmin ? updateNoteStatus : undefined}
                 showWorkerInfo={isAdmin}
+                isAdmin={isAdmin}
               />
             ))}
           </div>
