@@ -18,8 +18,11 @@ import {
   deleteObject
 } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
-import { Note, NoteFormData, FilterOptions, NoteStatus, UploadProgress } from '../types';
+import { Note, NoteFormData, FilterOptions, NoteStatus, UploadProgress, Comment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+
+// Generate unique ID for comments
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 export const useNotes = () => {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -168,8 +171,13 @@ export const useNotes = () => {
   };
 
   // Update an existing note
-  const updateNote = async (noteId: string, formData: Partial<NoteFormData>, newImages?: File[]): Promise<void> => {
-    if (!currentUser) {
+  const updateNote = async (
+    noteId: string, 
+    formData: Partial<NoteFormData>, 
+    newImages?: File[],
+    existingImageUrls?: string[]
+  ): Promise<void> => {
+    if (!currentUser || !userProfile) {
       throw new Error('User not authenticated');
     }
 
@@ -180,13 +188,20 @@ export const useNotes = () => {
       const noteRef = doc(db, 'notes', noteId);
       const updateData: Record<string, unknown> = {
         ...formData,
-        updatedAt: Timestamp.now()
+        updatedAt: Timestamp.now(),
+        lastEditedBy: currentUser.uid,
+        lastEditedByName: userProfile.displayName
       };
 
-      // Handle new images upload if provided
+      // Handle images
       if (newImages && newImages.length > 0) {
-        const imageUrls = await uploadImages(newImages);
-        updateData.imageUrls = imageUrls;
+        // Upload new images
+        const newImageUrls = await uploadImages(newImages);
+        // Combine with existing images if any
+        updateData.imageUrls = [...(existingImageUrls || []), ...newImageUrls];
+      } else if (existingImageUrls !== undefined) {
+        // Only existing images (some may have been removed)
+        updateData.imageUrls = existingImageUrls;
       }
 
       // Remove images field if it exists (we use imageUrls)
@@ -317,6 +332,87 @@ export const useNotes = () => {
     };
   }, [notes]);
 
+  // Add comment to a note
+  const addComment = async (noteId: string, text: string): Promise<Comment | null> => {
+    if (!currentUser || !userProfile) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const noteRef = doc(db, 'notes', noteId);
+      const note = notes.find(n => n.id === noteId);
+      
+      if (!note) {
+        throw new Error('Note not found');
+      }
+
+      const newComment: Comment = {
+        id: generateId(),
+        authorId: currentUser.uid,
+        authorName: userProfile.displayName,
+        authorEmail: currentUser.email || '',
+        text: text.trim(),
+        role: userProfile.role,
+        createdAt: Timestamp.now()
+      };
+
+      const existingComments = note.comments || [];
+      
+      await updateDoc(noteRef, {
+        comments: [...existingComments, newComment],
+        updatedAt: Timestamp.now()
+      });
+
+      return newComment;
+    } catch (err) {
+      console.error('Error adding comment:', err);
+      setError('Failed to add comment. Please try again.');
+      throw err;
+    }
+  };
+
+  // Delete comment from a note
+  const deleteComment = async (noteId: string, commentId: string): Promise<void> => {
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const noteRef = doc(db, 'notes', noteId);
+      const note = notes.find(n => n.id === noteId);
+      
+      if (!note) {
+        throw new Error('Note not found');
+      }
+
+      const existingComments = note.comments || [];
+      const updatedComments = existingComments.filter(c => c.id !== commentId);
+      
+      await updateDoc(noteRef, {
+        comments: updatedComments,
+        updatedAt: Timestamp.now()
+      });
+    } catch (err) {
+      console.error('Error deleting comment:', err);
+      setError('Failed to delete comment. Please try again.');
+      throw err;
+    }
+  };
+
+  // Check if user can edit a note
+  const canEditNote = useCallback((note: Note): boolean => {
+    if (!currentUser) return false;
+    // Admin can edit any note, workers can only edit their own
+    return isAdmin || note.userId === currentUser.uid;
+  }, [currentUser, isAdmin]);
+
+  // Check if user can delete a note
+  const canDeleteNote = useCallback((note: Note): boolean => {
+    if (!currentUser) return false;
+    // Only note owner can delete (or admin if needed)
+    return note.userId === currentUser.uid;
+  }, [currentUser]);
+
   return {
     notes,
     loading,
@@ -327,6 +423,10 @@ export const useNotes = () => {
     updateNote,
     deleteNote,
     updateNoteStatus,
+    addComment,
+    deleteComment,
+    canEditNote,
+    canDeleteNote,
     filterNotes,
     getProjectNames,
     getWorkerEmails,

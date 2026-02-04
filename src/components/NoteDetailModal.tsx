@@ -16,23 +16,49 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
-  Layers
+  Layers,
+  MessageSquare,
+  Send,
+  ChevronDown,
+  ChevronUp,
+  Shield,
+  Trash2,
+  Edit3
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface NoteDetailModalProps {
   note: Note | null;
   isOpen: boolean;
   onClose: () => void;
+  onAddComment?: (noteId: string, text: string) => Promise<Comment | null>;
+  onDeleteComment?: (noteId: string, commentId: string) => Promise<void>;
+  onEdit?: (note: Note) => void;
+  canEdit?: boolean;
 }
 
-const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose }) => {
+const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ 
+  note, 
+  isOpen, 
+  onClose,
+  onAddComment,
+  onDeleteComment,
+  onEdit,
+  canEdit = false
+}) => {
   const { isDark } = useTheme();
+  const { currentUser, isAdmin } = useAuth();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
+  const [showComments, setShowComments] = useState(true);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
   
   if (!isOpen || !note) return null;
+
+  const comments = note.comments || [];
 
   // Get images array with backward compatibility
   const images = getNoteImages(note);
@@ -94,6 +120,48 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
     }
   };
 
+  const handleSubmitComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() || !onAddComment) return;
+
+    setSubmittingComment(true);
+    try {
+      await onAddComment(note.id, newComment.trim());
+      setNewComment('');
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!onDeleteComment) return;
+    if (!window.confirm('Bu yorumu silmek istediğinizden emin misiniz?')) return;
+    
+    try {
+      await onDeleteComment(note.id, commentId);
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+    }
+  };
+
+  const formatCommentTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('tr-TR', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const canDeleteComment = (comment: Comment) => {
+    if (!currentUser) return false;
+    return isAdmin || comment.authorId === currentUser.uid;
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
@@ -122,16 +190,32 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
               {statusConfig.label}
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-2 rounded-lg transition-colors ml-2 ${
-              isDark 
-                ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
-                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Edit Button */}
+            {canEdit && onEdit && (
+              <button
+                onClick={() => onEdit(note)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  isDark 
+                    ? 'text-steel-300 hover:text-white hover:bg-steel-700/50' 
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                }`}
+              >
+                <Edit3 className="w-4 h-4" />
+                Düzenle
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-lg transition-colors ${
+                isDark 
+                  ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* İçerik */}
@@ -342,6 +426,133 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({ note, isOpen, onClose
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Yorumlar/Geri Bildirim Bölümü */}
+          <div className={`border-t ${isDark ? 'border-slate-700/50' : 'border-gray-200'}`}>
+            {/* Header */}
+            <button
+              onClick={() => setShowComments(!showComments)}
+              className={`w-full flex items-center justify-between p-4 transition-colors ${
+                isDark ? 'hover:bg-slate-800/50' : 'hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquare className={`w-5 h-5 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`} />
+                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Tartışma / Geri Bildirim
+                </span>
+                {comments.length > 0 && (
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                    isDark ? 'bg-blue-600/20 text-blue-400' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {comments.length}
+                  </span>
+                )}
+              </div>
+              {showComments ? (
+                <ChevronUp className={`w-5 h-5 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`} />
+              ) : (
+                <ChevronDown className={`w-5 h-5 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`} />
+              )}
+            </button>
+
+            {/* Comments Content */}
+            {showComments && (
+              <div className={`px-4 pb-4 space-y-4`}>
+                {/* Comments List */}
+                {comments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {comments.map((comment) => (
+                      <div
+                        key={comment.id}
+                        className={`rounded-xl p-3 ${
+                          comment.role === 'admin'
+                            ? isDark 
+                              ? 'bg-safety-orange/10 border border-safety-orange/30' 
+                              : 'bg-orange-50 border border-orange-200'
+                            : isDark 
+                              ? 'bg-slate-800/50 border border-slate-700/50' 
+                              : 'bg-gray-50 border border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                              {comment.authorName}
+                            </span>
+                            {comment.role === 'admin' && (
+                              <span className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                                isDark 
+                                  ? 'bg-safety-orange/20 text-safety-orange' 
+                                  : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                <Shield className="w-3 h-3" />
+                                Yönetici
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                              {formatCommentTime(comment.createdAt)}
+                            </span>
+                            {canDeleteComment(comment) && onDeleteComment && (
+                              <button
+                                onClick={() => handleDeleteComment(comment.id)}
+                                className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                                title="Yorumu sil"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <p className={`text-sm mt-2 whitespace-pre-wrap ${
+                          isDark ? 'text-concrete-300' : 'text-gray-700'
+                        }`}>
+                          {comment.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-6 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Henüz yorum yok</p>
+                    <p className="text-xs mt-1">İlk yorumu siz ekleyin</p>
+                  </div>
+                )}
+
+                {/* New Comment Form */}
+                {onAddComment && (
+                  <form onSubmit={handleSubmitComment} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder={isAdmin ? "Talimat veya geri bildirim yazın..." : "Yanıt yazın..."}
+                      className={`flex-1 rounded-xl px-4 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                        isDark 
+                          ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                          : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                      }`}
+                      disabled={submittingComment}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newComment.trim() || submittingComment}
+                      className="px-4 py-3 bg-safety-orange hover:bg-safety-orange-dark text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {submittingComment ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

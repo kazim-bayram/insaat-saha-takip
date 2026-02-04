@@ -96,8 +96,13 @@ export interface Note {
   customFields: CustomField[];  // Dynamic fields
   // Status workflow
   status: NoteStatus;
+  // Comments/Feedback system
+  comments?: Comment[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+  // Track who last edited (for notifications)
+  lastEditedBy?: string;
+  lastEditedByName?: string;
 }
 
 // Helper function to get images array with backward compatibility
@@ -133,4 +138,29 @@ export interface FilterOptions {
   projectName: string;
   dateFrom: string;
   dateTo: string;
+}
+
+// Comment/Feedback system
+export interface Comment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorEmail: string;
+  text: string;
+  role: UserRole;
+  createdAt: Timestamp;
+}
+
+// Notification system
+export interface Notification {
+  id: string;
+  recipientId: string;
+  senderId: string;
+  senderName: string;
+  noteId: string;
+  noteTitle: string;
+  message: string;
+  type: 'comment' | 'edit' | 'status_change';
+  isRead: boolean;
+  createdAt: Timestamp;
 }

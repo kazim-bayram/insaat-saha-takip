@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Layers
+  Layers,
+  MessageSquare
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages } from '../types';
@@ -25,6 +26,9 @@ interface NoteCardProps {
   onStatusChange?: (noteId: string, newStatus: NoteStatus) => Promise<void>;
   showWorkerInfo?: boolean;
   isAdmin?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  commentCount?: number;
 }
 
 const NoteCard: React.FC<NoteCardProps> = ({ 
@@ -34,7 +38,10 @@ const NoteCard: React.FC<NoteCardProps> = ({
   onDelete,
   onStatusChange,
   showWorkerInfo = false,
-  isAdmin = false
+  isAdmin = false,
+  canEdit = false,
+  canDelete = false,
+  commentCount
 }) => {
   const { isDark } = useTheme();
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -417,12 +424,23 @@ const NoteCard: React.FC<NoteCardProps> = ({
           )}
         </div>
 
-        {/* Aksiyon Butonları */}
-        {(onEdit || onDelete) && (
-          <div className={`flex items-center gap-2 mt-4 pt-3 border-t opacity-0 group-hover:opacity-100 transition-opacity ${
-            isDark ? 'border-slate-700/50' : 'border-gray-200'
-          }`}>
-            {onEdit && (
+        {/* Yorum Sayısı & Aksiyon Butonları */}
+        <div className={`flex items-center justify-between mt-4 pt-3 border-t ${
+          isDark ? 'border-slate-700/50' : 'border-gray-200'
+        }`}>
+          {/* Comment Count */}
+          <div className="flex items-center gap-2">
+            {(commentCount !== undefined && commentCount > 0) && (
+              <div className={`flex items-center gap-1.5 text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>{commentCount} yorum</span>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className={`flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity`}>
+            {canEdit && onEdit && (
               <button
                 onClick={handleEdit}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
@@ -435,7 +453,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
                 Düzenle
               </button>
             )}
-            {onDelete && (
+            {canDelete && onDelete && (
               <button
                 onClick={handleDelete}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -445,7 +463,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
               </button>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

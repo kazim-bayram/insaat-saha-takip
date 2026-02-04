@@ -23,7 +23,7 @@ interface ImagePreview {
 interface AddNoteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: NoteFormData) => Promise<void>;
+  onSubmit: (data: NoteFormData, existingImageUrls?: string[]) => Promise<void>;
   editNote?: Note | null;
   uploadProgress?: UploadProgress | null;
 }
@@ -190,7 +190,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         parsel: parsel.trim(),
         customFields: filteredCustomFields,
         images: imageFiles
-      });
+      }, existingImages.length > 0 ? existingImages : undefined);
       resetForm();
       onClose();
     } catch (err) {

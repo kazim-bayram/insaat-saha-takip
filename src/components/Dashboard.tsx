@@ -23,14 +23,16 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotes } from '../hooks/useNotes';
+import { useNotifications } from '../hooks/useNotifications';
 import { Note, FilterOptions, NOTE_STATUS_CONFIG, NoteFormData, getNoteImages } from '../types';
 import NoteCard from './NoteCard';
 import NoteDetailModal from './NoteDetailModal';
 import AddNoteModal from './AddNoteModal';
+import NotificationDropdown from './NotificationDropdown';
 import LoadingSpinner, { NotesGridSkeleton } from './LoadingSpinner';
 
 const Dashboard: React.FC = () => {
-  const { userProfile, logout, isAdmin } = useAuth();
+  const { userProfile, logout, isAdmin, currentUser } = useAuth();
   const { theme, toggleTheme, isDark } = useTheme();
   const {
     notes,
@@ -42,11 +44,23 @@ const Dashboard: React.FC = () => {
     updateNote,
     deleteNote,
     updateNoteStatus,
+    addComment,
+    deleteComment,
+    canEditNote,
+    canDeleteNote,
     filterNotes,
     getProjectNames,
     getWorkerEmails,
     getKPIStats
   } = useNotes();
+
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    createNotification
+  } = useNotifications();
 
   // Modal durumları
   const [showAddModal, setShowAddModal] = useState(false);
@@ -165,9 +179,27 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleSubmitNote = async (formData: NoteFormData) => {
+  const handleSubmitNote = async (formData: NoteFormData, existingImageUrls?: string[]) => {
     if (editingNote) {
-      await updateNote(editingNote.id, formData, formData.images.length > 0 ? formData.images : undefined);
+      await updateNote(
+        editingNote.id, 
+        formData, 
+        formData.images.length > 0 ? formData.images : undefined,
+        existingImageUrls
+      );
+      
+      // If admin is editing someone else's note, create notification
+      if (isAdmin && currentUser && editingNote.userId !== currentUser.uid && userProfile) {
+        await createNotification(
+          editingNote.userId,
+          currentUser.uid,
+          userProfile.displayName,
+          editingNote.id,
+          editingNote.title,
+          `${userProfile.displayName} raporunuzu düzenledi`,
+          'edit'
+        );
+      }
     } else {
       await createNote(formData);
     }
@@ -177,6 +209,41 @@ const Dashboard: React.FC = () => {
   const handleCloseAddModal = () => {
     setShowAddModal(false);
     setEditingNote(null);
+  };
+
+  // Handle adding comment with notification
+  const handleAddComment = async (noteId: string, text: string) => {
+    const comment = await addComment(noteId, text);
+    
+    // Find the note to get owner info
+    const note = notes.find(n => n.id === noteId);
+    if (note && currentUser && userProfile) {
+      // If admin comments on worker's note, notify the worker
+      if (isAdmin && note.userId !== currentUser.uid) {
+        await createNotification(
+          note.userId,
+          currentUser.uid,
+          userProfile.displayName,
+          noteId,
+          note.title,
+          `${userProfile.displayName} notunuza yorum ekledi: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`,
+          'comment'
+        );
+      }
+      // If worker replies, notify the admin (notify all admins or the last commenter who was admin)
+      // For simplicity, we'll just handle admin -> worker notifications
+    }
+    
+    return comment;
+  };
+
+  // Handle notification click - navigate to the relevant note
+  const handleNotificationClick = (notification: any) => {
+    const note = notes.find(n => n.id === notification.noteId);
+    if (note) {
+      setSelectedNote(note);
+      setShowDetailModal(true);
+    }
   };
 
   const clearFilters = () => {
@@ -223,6 +290,15 @@ const Dashboard: React.FC = () => {
 
             {/* Kullanıcı Bilgisi & Aksiyonlar */}
             <div className="flex items-center gap-3">
+              {/* Bildirimler */}
+              <NotificationDropdown
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onMarkAsRead={markAsRead}
+                onMarkAllAsRead={markAllAsRead}
+                onNotificationClick={handleNotificationClick}
+              />
+
               {/* Tema Değiştirici */}
               <button
                 onClick={toggleTheme}
@@ -597,11 +673,14 @@ const Dashboard: React.FC = () => {
                 key={note.id}
                 note={note}
                 onClick={() => handleNoteClick(note)}
-                onEdit={!isAdmin ? () => handleEditNote(note) : undefined}
-                onDelete={!isAdmin ? () => handleDeleteNote(note) : undefined}
+                onEdit={() => handleEditNote(note)}
+                onDelete={() => handleDeleteNote(note)}
                 onStatusChange={isAdmin ? updateNoteStatus : undefined}
                 showWorkerInfo={isAdmin}
                 isAdmin={isAdmin}
+                canEdit={canEditNote(note)}
+                canDelete={canDeleteNote(note)}
+                commentCount={note.comments?.length || 0}
               />
             ))}
           </div>
@@ -639,6 +718,13 @@ const Dashboard: React.FC = () => {
           setShowDetailModal(false);
           setSelectedNote(null);
         }}
+        onAddComment={handleAddComment}
+        onDeleteComment={deleteComment}
+        onEdit={(note) => {
+          setShowDetailModal(false);
+          handleEditNote(note);
+        }}
+        canEdit={selectedNote ? canEditNote(selectedNote) : false}
       />
     </div>
   );
