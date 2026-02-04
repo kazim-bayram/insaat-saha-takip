@@ -125,6 +125,9 @@ export const useNotes = () => {
         title: formData.title,
         content: formData.content,
         projectName: formData.projectName,
+        ada: formData.ada || '',
+        parsel: formData.parsel || '',
+        customFields: formData.customFields || [],
         createdAt: Timestamp.now()
       };
 

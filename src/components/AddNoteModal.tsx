@@ -6,10 +6,13 @@ import {
   FileText,
   Loader2,
   AlertCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Plus,
+  Trash2,
+  MapPin
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { NoteFormData, Note } from '../types';
+import { NoteFormData, Note, CustomField } from '../types';
 
 interface AddNoteModalProps {
   isOpen: boolean;
@@ -28,6 +31,9 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [projectName, setProjectName] = useState('');
+  const [ada, setAda] = useState('');
+  const [parsel, setParsel] = useState('');
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -42,6 +48,9 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       setTitle(editNote.title);
       setContent(editNote.content);
       setProjectName(editNote.projectName);
+      setAda(editNote.ada || '');
+      setParsel(editNote.parsel || '');
+      setCustomFields(editNote.customFields || []);
       if (editNote.imageUrl) {
         setImagePreview(editNote.imageUrl);
       }
@@ -54,9 +63,27 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     setTitle('');
     setContent('');
     setProjectName('');
+    setAda('');
+    setParsel('');
+    setCustomFields([]);
     setImageFile(null);
     setImagePreview(null);
     setError(null);
+  };
+
+  // Custom field handlers
+  const addCustomField = () => {
+    setCustomFields([...customFields, { label: '', value: '' }]);
+  };
+
+  const updateCustomField = (index: number, field: 'label' | 'value', newValue: string) => {
+    const updated = [...customFields];
+    updated[index][field] = newValue;
+    setCustomFields(updated);
+  };
+
+  const removeCustomField = (index: number) => {
+    setCustomFields(customFields.filter((_, i) => i !== index));
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,10 +128,18 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     setSubmitting(true);
 
     try {
+      // Filter out empty custom fields
+      const filteredCustomFields = customFields.filter(
+        field => field.label.trim() && field.value.trim()
+      );
+
       await onSubmit({
         title: title.trim(),
         content: content.trim(),
         projectName: projectName.trim(),
+        ada: ada.trim(),
+        parsel: parsel.trim(),
+        customFields: filteredCustomFields,
         image: imageFile
       });
       resetForm();
@@ -297,6 +332,107 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                 }`}
                 required
               />
+            </div>
+
+            {/* Ada/Parsel Bilgileri */}
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                <span className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Arazi Bilgileri
+                </span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <input
+                    type="text"
+                    value={ada}
+                    onChange={(e) => setAda(e.target.value)}
+                    placeholder="Ada (Örn: 123)"
+                    className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={parsel}
+                    onChange={(e) => setParsel(e.target.value)}
+                    placeholder="Parsel (Örn: 5)"
+                    className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dinamik Özel Alanlar */}
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Özel Alanlar
+              </label>
+              
+              {/* Mevcut özel alanlar */}
+              {customFields.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {customFields.map((field, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={field.label}
+                        onChange={(e) => updateCustomField(index, 'label', e.target.value)}
+                        placeholder="Etiket (Örn: Beton Sınıfı)"
+                        className={`flex-1 rounded-xl px-3 py-2.5 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                          isDark 
+                            ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                            : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                        }`}
+                      />
+                      <input
+                        type="text"
+                        value={field.value}
+                        onChange={(e) => updateCustomField(index, 'value', e.target.value)}
+                        placeholder="Değer (Örn: C30)"
+                        className={`flex-1 rounded-xl px-3 py-2.5 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                          isDark 
+                            ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                            : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCustomField(index)}
+                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Alan Ekle Butonu */}
+              <button
+                type="button"
+                onClick={addCustomField}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  isDark 
+                    ? 'bg-slate-800 text-concrete-300 hover:text-white hover:bg-slate-700 border border-slate-600' 
+                    : 'bg-gray-100 text-gray-600 hover:text-gray-800 hover:bg-gray-200 border border-gray-300'
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+                + Alan Ekle
+              </button>
+              <p className={`text-xs mt-2 ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
+                Beton sınıfı, kat sayısı gibi ek bilgiler ekleyebilirsiniz
+              </p>
             </div>
 
             {/* Açıklama/İçerik Alanı */}

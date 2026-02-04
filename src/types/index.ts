@@ -10,6 +10,12 @@ export interface UserProfile {
   createdAt: Timestamp;
 }
 
+// Custom field for dynamic key-value pairs
+export interface CustomField {
+  label: string;
+  value: string;
+}
+
 export interface Note {
   id: string;
   userId: string;
@@ -19,6 +25,10 @@ export interface Note {
   title: string;
   content: string;
   projectName: string;
+  // Land surveying fields
+  ada: string;      // Block
+  parsel: string;   // Parcel
+  customFields: CustomField[];  // Dynamic fields
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -27,6 +37,9 @@ export interface NoteFormData {
   title: string;
   content: string;
   projectName: string;
+  ada: string;
+  parsel: string;
+  customFields: CustomField[];
   image: File | null;
 }
 

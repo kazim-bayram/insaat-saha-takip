@@ -5,7 +5,8 @@ import {
   User, 
   Trash2, 
   Edit3,
-  ImageIcon
+  ImageIcon,
+  MapPin
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { Note } from '../types';
@@ -86,8 +87,54 @@ const NoteCard: React.FC<NoteCardProps> = ({
           {note.title || 'Başlıksız Not'}
         </h3>
 
+        {/* Ada/Parsel Bilgileri */}
+        {(note.ada || note.parsel) && (
+          <div className={`flex items-center gap-2 mb-2 flex-wrap`}>
+            <MapPin className={`w-3.5 h-3.5 ${isDark ? 'text-safety-orange' : 'text-orange-500'}`} />
+            {note.ada && (
+              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                isDark 
+                  ? 'bg-safety-orange/20 text-safety-orange' 
+                  : 'bg-orange-100 text-orange-700'
+              }`}>
+                Ada: {note.ada}
+              </span>
+            )}
+            {note.parsel && (
+              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                isDark 
+                  ? 'bg-steel-600/20 text-steel-300' 
+                  : 'bg-blue-100 text-blue-700'
+              }`}>
+                Parsel: {note.parsel}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Özel Alanlar */}
+        {note.customFields && note.customFields.length > 0 && (
+          <div className={`mb-3 p-2 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'}`}>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {note.customFields.slice(0, 3).map((field, index) => (
+                <div key={index} className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                  <span className={`font-medium ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                    {field.label}:
+                  </span>{' '}
+                  {field.value}
+                </div>
+              ))}
+              {note.customFields.length > 3 && (
+                <span className={`text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                  +{note.customFields.length - 3} daha
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* İçerik Önizleme */}
-        <p className={`text-sm line-clamp-3 mb-3 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+        <p className={`text-sm line-clamp-2 mb-3 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
           {note.content || 'Açıklama girilmemiş'}
         </p>
 
