@@ -14,9 +14,6 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ],
-  "env": {
-    "FIREBASE_SERVICE_ACCOUNT_KEY": "@firebase_service_account_key",
-    "ALLOWED_ORIGIN": "https://insaat-saha-takip.vercel.app"
-  }
+  ]
+  
 }
