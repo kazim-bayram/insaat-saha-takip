@@ -7,22 +7,22 @@ import LoadingSpinner from './components/LoadingSpinner';
 const App: React.FC = () => {
   const { currentUser, userProfile, loading } = useAuth();
 
-  // Show loading spinner while checking auth state
+  // Yükleniyor durumunu kontrol et
   if (loading) {
-    return <LoadingSpinner fullScreen message="Loading SiteNotes..." />;
+    return <LoadingSpinner fullScreen message="SahaNot yükleniyor..." />;
   }
 
-  // Show login if not authenticated
+  // Giriş yapılmadıysa login ekranını göster
   if (!currentUser) {
     return <Login />;
   }
 
-  // Show loading if user is authenticated but profile hasn't loaded yet
+  // Kullanıcı girişi yapıldı ama profil yüklenmediyse
   if (!userProfile) {
-    return <LoadingSpinner fullScreen message="Loading your profile..." />;
+    return <LoadingSpinner fullScreen message="Profiliniz yükleniyor..." />;
   }
 
-  // Show dashboard for authenticated users
+  // Ana panel
   return <Dashboard />;
 };
 

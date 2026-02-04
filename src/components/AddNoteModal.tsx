@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Image as ImageIcon
 } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 import { NoteFormData, Note } from '../types';
 
 interface AddNoteModalProps {
@@ -23,6 +24,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   onSubmit,
   editNote
 }) => {
+  const { isDark } = useTheme();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [projectName, setProjectName] = useState('');
@@ -34,7 +36,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Populate form when editing
+  // Düzenleme modunda formu doldur
   useEffect(() => {
     if (editNote) {
       setTitle(editNote.title);
@@ -61,22 +63,22 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
+    // Dosya türü kontrolü
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
+      setError('Lütfen bir resim dosyası seçin');
       return;
     }
 
-    // Validate file size (max 10MB)
+    // Dosya boyutu kontrolü (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      setError('Image must be less than 10MB');
+      setError('Resim 10MB\'dan küçük olmalıdır');
       return;
     }
 
     setImageFile(file);
     setError(null);
 
-    // Create preview
+    // Önizleme oluştur
     const previewUrl = URL.createObjectURL(file);
     setImagePreview(previewUrl);
   };
@@ -85,14 +87,14 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    // Validation
+    // Doğrulama
     if (!title.trim()) {
-      setError('Please enter a title');
+      setError('Lütfen bir başlık girin');
       return;
     }
 
     if (!projectName.trim()) {
-      setError('Please enter a project name');
+      setError('Lütfen bir proje adı girin');
       return;
     }
 
@@ -108,7 +110,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       resetForm();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save note');
+      setError(err instanceof Error ? err.message : 'Not kaydedilemedi');
     } finally {
       setSubmitting(false);
     }
@@ -134,16 +136,26 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center animate-fade-in"
       onClick={handleBackdropClick}
     >
-      <div className="bg-slate-850 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-hidden shadow-2xl border border-slate-700/50 animate-slide-up">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-700/50">
-          <h2 className="text-xl font-semibold text-white">
-            {editNote ? 'Edit Note' : 'Add Field Note'}
+      <div className={`rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-hidden shadow-2xl border animate-slide-up ${
+        isDark 
+          ? 'bg-slate-850 border-slate-700/50' 
+          : 'bg-white border-gray-200'
+      }`}>
+        {/* Başlık */}
+        <div className={`flex items-center justify-between p-4 border-b ${
+          isDark ? 'border-slate-700/50' : 'border-gray-200'
+        }`}>
+          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            {editNote ? 'Notu Düzenle' : 'Saha Notu Ekle'}
           </h2>
           <button
             onClick={onClose}
             disabled={submitting}
-            className="p-2 text-concrete-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors disabled:opacity-50"
+            className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+              isDark 
+                ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+            }`}
           >
             <X className="w-5 h-5" />
           </button>
@@ -152,7 +164,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-140px)]">
           <div className="p-4 space-y-5">
-            {/* Error Alert */}
+            {/* Hata Mesajı */}
             {error && (
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -160,21 +172,21 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
               </div>
             )}
 
-            {/* Image Upload Section */}
+            {/* Resim Yükleme Bölümü */}
             <div>
-              <label className="block text-concrete-300 text-sm font-medium mb-2">
-                Photo
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Fotoğraf
               </label>
 
               {imagePreview ? (
-                <div className="relative rounded-xl overflow-hidden bg-slate-800">
+                <div className={`relative rounded-xl overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
                   <img
                     src={imagePreview}
-                    alt="Preview"
+                    alt="Önizleme"
                     className="w-full h-48 object-cover"
                   />
 
-                  {/* Remove Button */}
+                  {/* Kaldır Butonu */}
                   <button
                     type="button"
                     onClick={removeImage}
@@ -185,15 +197,23 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Camera Button */}
+                  {/* Kamera Butonu */}
                   <button
                     type="button"
                     onClick={() => cameraInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-600 hover:border-safety-orange rounded-xl transition-colors group"
+                    className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl transition-colors group ${
+                      isDark 
+                        ? 'border-slate-600 hover:border-safety-orange' 
+                        : 'border-gray-300 hover:border-safety-orange'
+                    }`}
                   >
-                    <Camera className="w-8 h-8 text-concrete-400 group-hover:text-safety-orange mb-2 transition-colors" />
-                    <span className="text-concrete-400 group-hover:text-concrete-200 text-sm font-medium transition-colors">
-                      Take Photo
+                    <Camera className={`w-8 h-8 mb-2 transition-colors group-hover:text-safety-orange ${
+                      isDark ? 'text-concrete-400' : 'text-gray-400'
+                    }`} />
+                    <span className={`text-sm font-medium transition-colors group-hover:text-gray-200 ${
+                      isDark ? 'text-concrete-400' : 'text-gray-500'
+                    }`}>
+                      Fotoğraf Çek
                     </span>
                   </button>
                   <input
@@ -205,15 +225,23 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                     className="hidden"
                   />
 
-                  {/* Upload Button */}
+                  {/* Yükle Butonu */}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-600 hover:border-safety-orange rounded-xl transition-colors group"
+                    className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl transition-colors group ${
+                      isDark 
+                        ? 'border-slate-600 hover:border-safety-orange' 
+                        : 'border-gray-300 hover:border-safety-orange'
+                    }`}
                   >
-                    <Upload className="w-8 h-8 text-concrete-400 group-hover:text-safety-orange mb-2 transition-colors" />
-                    <span className="text-concrete-400 group-hover:text-concrete-200 text-sm font-medium transition-colors">
-                      Upload Image
+                    <Upload className={`w-8 h-8 mb-2 transition-colors group-hover:text-safety-orange ${
+                      isDark ? 'text-concrete-400' : 'text-gray-400'
+                    }`} />
+                    <span className={`text-sm font-medium transition-colors group-hover:text-gray-200 ${
+                      isDark ? 'text-concrete-400' : 'text-gray-500'
+                    }`}>
+                      Resim Yükle
                     </span>
                   </button>
                   <input
@@ -226,70 +254,88 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                 </div>
               )}
 
-              {/* Image Info */}
-              <p className="text-concrete-500 text-xs mt-2 flex items-center gap-1">
+              {/* Resim Bilgisi */}
+              <p className={`text-xs mt-2 flex items-center gap-1 ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
                 <ImageIcon className="w-3.5 h-3.5" />
-                Take or upload a photo of the site issue
+                Saha sorununun fotoğrafını çekin veya yükleyin
               </p>
             </div>
 
-            {/* Title Input */}
+            {/* Başlık Girişi */}
             <div>
-              <label className="block text-concrete-300 text-sm font-medium mb-2">
-                Title *
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Başlık *
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., Concrete crack on Level 3"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-4 py-4 text-white placeholder-concrete-500 focus:outline-none focus:border-safety-orange focus:ring-2 focus:ring-safety-orange/20 transition-all"
+                placeholder="Örn: 3. Katta beton çatlağı"
+                className={`w-full rounded-xl px-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                  isDark 
+                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                    : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                }`}
                 required
               />
             </div>
 
-            {/* Project Name Input */}
+            {/* Proje Adı Girişi */}
             <div>
-              <label className="block text-concrete-300 text-sm font-medium mb-2">
-                Project Name *
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Proje Adı *
               </label>
               <input
                 type="text"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
-                placeholder="e.g., Building A - Foundation Work"
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-4 py-4 text-white placeholder-concrete-500 focus:outline-none focus:border-safety-orange focus:ring-2 focus:ring-safety-orange/20 transition-all"
+                placeholder="Örn: A Blok - Temel İşleri"
+                className={`w-full rounded-xl px-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                  isDark 
+                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                    : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                }`}
                 required
               />
             </div>
 
-            {/* Description/Content Textarea */}
+            {/* Açıklama/İçerik Alanı */}
             <div>
-              <label className="block text-concrete-300 text-sm font-medium mb-2">
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
                 <span className="flex items-center gap-2">
                   <FileText className="w-4 h-4" />
-                  Description
+                  Açıklama
                 </span>
               </label>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Describe the issue, location, or any relevant details..."
+                placeholder="Sorunu, konumu veya ilgili detayları açıklayın..."
                 rows={5}
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-4 py-4 text-white placeholder-concrete-500 focus:outline-none focus:border-safety-orange focus:ring-2 focus:ring-safety-orange/20 transition-all resize-none"
+                className={`w-full rounded-xl px-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 resize-none ${
+                  isDark 
+                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                    : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                }`}
               />
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="flex gap-3 p-4 border-t border-slate-700/50 bg-slate-900/30">
+          {/* Alt Aksiyonlar */}
+          <div className={`flex gap-3 p-4 border-t ${
+            isDark ? 'border-slate-700/50 bg-slate-900/30' : 'border-gray-200 bg-gray-50'
+          }`}>
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="flex-1 px-6 py-4 border border-slate-600 text-concrete-300 hover:text-white hover:bg-slate-700/50 rounded-xl font-medium transition-colors disabled:opacity-50"
+              className={`flex-1 px-6 py-4 border rounded-xl font-medium transition-colors disabled:opacity-50 ${
+                isDark 
+                  ? 'border-slate-600 text-concrete-300 hover:text-white hover:bg-slate-700/50' 
+                  : 'border-gray-300 text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+              }`}
             >
-              Cancel
+              İptal
             </button>
             <button
               type="submit"
@@ -299,10 +345,10 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
               {submitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Saving...
+                  Kaydediliyor...
                 </>
               ) : (
-                editNote ? 'Update Note' : 'Save Note'
+                editNote ? 'Notu Güncelle' : 'Notu Kaydet'
               )}
             </button>
           </div>

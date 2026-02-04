@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { HardHat, Mail, Lock, User, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { HardHat, Mail, Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 const Login: React.FC = () => {
   const [isRegister, setIsRegister] = useState(false);
@@ -12,6 +13,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const { login, register } = useAuth();
+  const { theme, toggleTheme, isDark } = useTheme();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,23 +23,23 @@ const Login: React.FC = () => {
     try {
       if (isRegister) {
         if (!displayName.trim()) {
-          throw new Error('Please enter your name');
+          throw new Error('Lütfen adınızı girin');
         }
         await register(email, password, displayName);
       } else {
         await login(email, password);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Authentication failed';
-      // Make Firebase errors more user-friendly
+      const message = err instanceof Error ? err.message : 'Kimlik doğrulama başarısız';
+      // Firebase hatalarını kullanıcı dostu mesajlara çevir
       if (message.includes('auth/invalid-credential')) {
-        setError('Invalid email or password. Please try again.');
+        setError('Geçersiz e-posta veya şifre. Lütfen tekrar deneyin.');
       } else if (message.includes('auth/email-already-in-use')) {
-        setError('This email is already registered. Please sign in instead.');
+        setError('Bu e-posta zaten kayıtlı. Lütfen giriş yapın.');
       } else if (message.includes('auth/weak-password')) {
-        setError('Password should be at least 6 characters long.');
+        setError('Şifre en az 6 karakter olmalıdır.');
       } else if (message.includes('auth/invalid-email')) {
-        setError('Please enter a valid email address.');
+        setError('Lütfen geçerli bir e-posta adresi girin.');
       } else {
         setError(message);
       }
@@ -47,31 +49,60 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-steel-900 flex items-center justify-center p-4">
-      {/* Background Pattern */}
+    <div className={`min-h-screen flex items-center justify-center p-4 transition-colors ${
+      isDark 
+        ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-steel-900' 
+        : 'bg-gradient-to-br from-gray-100 via-gray-50 to-steel-50'
+    }`}>
+      {/* Arka Plan Deseni */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-2 safety-tape opacity-60" />
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-safety-orange/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-steel-600/10 rounded-full blur-3xl" />
+        <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full blur-3xl ${
+          isDark ? 'bg-safety-orange/10' : 'bg-safety-orange/20'
+        }`} />
+        <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full blur-3xl ${
+          isDark ? 'bg-steel-600/10' : 'bg-steel-300/30'
+        }`} />
       </div>
 
+      {/* Tema Değiştirici */}
+      <button
+        onClick={toggleTheme}
+        className={`absolute top-4 right-4 p-3 rounded-xl transition-colors ${
+          isDark 
+            ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' 
+            : 'bg-white text-gray-700 hover:bg-gray-100 shadow-md'
+        }`}
+        title={isDark ? 'Açık Tema' : 'Koyu Tema'}
+      >
+        {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+      </button>
+
       <div className="relative w-full max-w-md animate-fade-in">
-        {/* Logo & Header */}
+        {/* Logo & Başlık */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-safety-orange to-safety-orange-dark rounded-2xl shadow-industrial-lg mb-4">
             <HardHat className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">SiteNotes</h1>
-          <p className="text-concrete-400">Construction Field Note App</p>
+          <h1 className={`text-3xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            SahaNot
+          </h1>
+          <p className={isDark ? 'text-concrete-400' : 'text-gray-500'}>
+            Şantiye Saha Takip Uygulaması
+          </p>
         </div>
 
-        {/* Login Card */}
-        <div className="bg-slate-850/80 backdrop-blur-sm rounded-2xl shadow-industrial-lg border border-slate-700/50 p-8">
-          <h2 className="text-xl font-semibold text-white mb-6 text-center">
-            {isRegister ? 'Create Account' : 'Welcome Back'}
+        {/* Giriş Kartı */}
+        <div className={`rounded-2xl shadow-industrial-lg border p-8 ${
+          isDark 
+            ? 'bg-slate-850/80 backdrop-blur-sm border-slate-700/50' 
+            : 'bg-white/90 backdrop-blur-sm border-gray-200'
+        }`}>
+          <h2 className={`text-xl font-semibold mb-6 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            {isRegister ? 'Hesap Oluştur' : 'Hoş Geldiniz'}
           </h2>
 
-          {/* Error Alert */}
+          {/* Hata Mesajı */}
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3 animate-slide-up">
               <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -80,71 +111,85 @@ const Login: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name Field (Register Only) */}
+            {/* Ad Soyad Alanı (Sadece Kayıt) */}
             {isRegister && (
               <div className="animate-slide-up">
-                <label className="block text-concrete-300 text-sm font-medium mb-2">
-                  Full Name
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  Ad Soyad
                 </label>
                 <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-concrete-500" />
+                  <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
                   <input
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="John Smith"
-                    className="w-full bg-slate-900/50 border border-slate-600 rounded-xl pl-12 pr-4 py-4 text-white placeholder-concrete-500 focus:outline-none focus:border-safety-orange focus:ring-2 focus:ring-safety-orange/20 transition-all"
+                    placeholder="Ahmet Yılmaz"
+                    className={`w-full rounded-xl pl-12 pr-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    }`}
                     required={isRegister}
                   />
                 </div>
               </div>
             )}
 
-            {/* Email Field */}
+            {/* E-posta Alanı */}
             <div>
-              <label className="block text-concrete-300 text-sm font-medium mb-2">
-                Email Address
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                E-posta Adresi
               </label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-concrete-500" />
+                <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-xl pl-12 pr-4 py-4 text-white placeholder-concrete-500 focus:outline-none focus:border-safety-orange focus:ring-2 focus:ring-safety-orange/20 transition-all"
+                  placeholder="ornek@sirket.com"
+                  className={`w-full rounded-xl pl-12 pr-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                      : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                  }`}
                   required
                 />
               </div>
             </div>
 
-            {/* Password Field */}
+            {/* Şifre Alanı */}
             <div>
-              <label className="block text-concrete-300 text-sm font-medium mb-2">
-                Password
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Şifre
               </label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-concrete-500" />
+                <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-xl pl-12 pr-12 py-4 text-white placeholder-concrete-500 focus:outline-none focus:border-safety-orange focus:ring-2 focus:ring-safety-orange/20 transition-all"
+                  className={`w-full rounded-xl pl-12 pr-12 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                      : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                  }`}
                   required
                   minLength={6}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-concrete-500 hover:text-concrete-300 transition-colors"
+                  className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${
+                    isDark ? 'text-concrete-500 hover:text-concrete-300' : 'text-gray-400 hover:text-gray-600'
+                  }`}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            {/* Submit Button */}
+            {/* Gönder Butonu */}
             <button
               type="submit"
               disabled={loading}
@@ -153,18 +198,18 @@ const Login: React.FC = () => {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {isRegister ? 'Creating Account...' : 'Signing In...'}
+                  {isRegister ? 'Hesap Oluşturuluyor...' : 'Giriş Yapılıyor...'}
                 </>
               ) : (
-                isRegister ? 'Create Account' : 'Sign In'
+                isRegister ? 'Hesap Oluştur' : 'Giriş Yap'
               )}
             </button>
           </form>
 
-          {/* Toggle Register/Login */}
+          {/* Kayıt/Giriş Geçişi */}
           <div className="mt-6 text-center">
-            <p className="text-concrete-400 text-sm">
-              {isRegister ? 'Already have an account?' : "Don't have an account?"}
+            <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+              {isRegister ? 'Zaten hesabınız var mı?' : 'Hesabınız yok mu?'}
               <button
                 onClick={() => {
                   setIsRegister(!isRegister);
@@ -172,15 +217,15 @@ const Login: React.FC = () => {
                 }}
                 className="ml-2 text-safety-orange hover:text-safety-orange-light font-medium transition-colors"
               >
-                {isRegister ? 'Sign In' : 'Create Account'}
+                {isRegister ? 'Giriş Yap' : 'Hesap Oluştur'}
               </button>
             </p>
           </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-concrete-500 text-sm mt-6">
-          Secure site documentation for your engineering team
+        {/* Alt Yazı */}
+        <p className={`text-center text-sm mt-6 ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
+          Mühendislik ekibiniz için güvenli saha belgeleme
         </p>
       </div>
     </div>
