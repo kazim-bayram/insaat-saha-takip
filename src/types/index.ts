@@ -85,6 +85,7 @@ export interface Note {
   userId: string;
   userEmail: string;
   userName: string;
+  userRole?: UserRole;  // Track if admin or worker created the note
   // Multi-image support (new)
   imageUrls: string[];
   // Legacy single image field (for backward compatibility)
@@ -136,8 +137,11 @@ export interface UploadProgress {
 }
 
 export interface FilterOptions {
+  searchQuery: string;
   workerEmail: string;
   projectName: string;
+  ada: string;
+  parsel: string;
   dateFrom: string;
   dateTo: string;
 }

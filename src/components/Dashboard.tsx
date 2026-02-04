@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   Plus,
-  Filter,
   X,
   Calendar,
   FolderOpen,
@@ -17,7 +16,10 @@ import {
   Clock,
   CheckCircle2,
   Users,
-  BarChart3
+  BarChart3,
+  Search,
+  MapPin,
+  RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -35,7 +37,7 @@ import LoadingSpinner, { NotesGridSkeleton } from './LoadingSpinner';
 
 const Dashboard: React.FC = () => {
   const { userProfile, logout, isAdmin, currentUser } = useAuth();
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
   const {
     notes,
     loading,
@@ -52,7 +54,7 @@ const Dashboard: React.FC = () => {
     canDeleteNote,
     filterNotes,
     getProjectNames,
-    getWorkerEmails,
+    getWorkerNames,
     getKPIStats
   } = useNotes();
 
@@ -74,25 +76,26 @@ const Dashboard: React.FC = () => {
 
   // Görünüm durumu
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showFilters, setShowFilters] = useState(false);
 
   // Filtre durumu
   const [filters, setFilters] = useState<FilterOptions>({
+    searchQuery: '',
     workerEmail: '',
     projectName: '',
+    ada: '',
+    parsel: '',
     dateFrom: '',
     dateTo: ''
   });
 
-  // Filtreleri uygula
+  // Filtreleri uygula - works for both admin and workers
   const filteredNotes = useMemo(() => {
-    if (!isAdmin) return notes;
     return filterNotes(filters);
-  }, [notes, filters, filterNotes, isAdmin]);
+  }, [notes, filters, filterNotes]);
 
   // Filtre dropdown'ları için benzersiz değerler
   const projectNames = useMemo(() => getProjectNames(), [getProjectNames]);
-  const workerEmails = useMemo(() => getWorkerEmails(), [getWorkerEmails]);
+  const workerNames = useMemo(() => getWorkerNames(), [getWorkerNames]);
 
   // KPI statistics
   const kpiStats = useMemo(() => getKPIStats(), [getKPIStats]);
@@ -252,14 +255,18 @@ const Dashboard: React.FC = () => {
 
   const clearFilters = () => {
     setFilters({
+      searchQuery: '',
       workerEmail: '',
       projectName: '',
+      ada: '',
+      parsel: '',
       dateFrom: '',
       dateTo: ''
     });
   };
 
-  const hasActiveFilters = filters.workerEmail || filters.projectName || filters.dateFrom || filters.dateTo;
+  const hasActiveFilters = filters.searchQuery || filters.workerEmail || filters.projectName || 
+                            filters.ada || filters.parsel || filters.dateFrom || filters.dateTo;
 
   const handleLogout = async () => {
     try {
@@ -428,16 +435,12 @@ const Dashboard: React.FC = () => {
               <span className={isDark ? 'text-concrete-500' : 'text-gray-500'}>
                 {filteredNotes.length === 1 ? 'Not' : 'Not'}
               </span>
+              {hasActiveFilters && (
+                <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-safety-orange/20 text-safety-orange' : 'bg-orange-100 text-orange-700'}`}>
+                  Filtrelenmiş
+                </span>
+              )}
             </div>
-            {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-safety-orange hover:bg-safety-orange/10 rounded-lg transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-                Filtreleri Temizle
-              </button>
-            )}
           </div>
 
           {/* Görünüm Değiştirici & Filtre Butonu */}
@@ -468,25 +471,6 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            {/* Filtre Butonu (Sadece Yönetici) */}
-            {isAdmin && (
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  showFilters || hasActiveFilters
-                    ? 'bg-safety-orange/20 text-safety-orange'
-                    : isDark 
-                      ? 'bg-slate-800 text-concrete-300 hover:text-white' 
-                      : 'bg-gray-200 text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-                <span className="text-sm font-medium">Filtreler</span>
-                {hasActiveFilters && (
-                  <span className="w-2 h-2 bg-safety-orange rounded-full" />
-                )}
-              </button>
-            )}
 
             {/* Export Butonu (Sadece Yönetici) */}
             {isAdmin && (
@@ -506,17 +490,103 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Filtre Paneli (Sadece Yönetici) */}
-        {isAdmin && showFilters && (
-          <div className={`rounded-xl border p-4 mb-6 animate-slide-up ${
-            isDark 
-              ? 'bg-slate-850 border-slate-700/50' 
-              : 'bg-white border-gray-200 shadow-sm'
-          }`}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Çalışan Filtresi */}
+        {/* Advanced Filter Bar */}
+        <div className={`rounded-xl border p-4 mb-6 ${
+          isDark 
+            ? 'bg-slate-850 border-slate-700/50' 
+            : 'bg-gray-100 border-gray-200'
+        }`}>
+          {/* Search Bar - Full Width */}
+          <div className="mb-4">
+            <div className="relative">
+              <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+              <input
+                type="text"
+                value={filters.searchQuery}
+                onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                placeholder="Başlık veya içerikte ara..."
+                className={`w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-safety-orange/20 focus:border-safety-orange transition-all ${
+                  isDark 
+                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500' 
+                    : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400'
+                }`}
+              />
+            </div>
+          </div>
+
+          {/* Filter Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* Ada (Island) */}
+            <div>
+              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                Ada
+              </label>
+              <div className="relative">
+                <MapPin className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                <input
+                  type="text"
+                  value={filters.ada}
+                  onChange={(e) => setFilters({ ...filters, ada: e.target.value })}
+                  placeholder="Ada No"
+                  className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500' 
+                      : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Parsel (Parcel) */}
+            <div>
+              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                Parsel
+              </label>
+              <div className="relative">
+                <MapPin className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                <input
+                  type="text"
+                  value={filters.parsel}
+                  onChange={(e) => setFilters({ ...filters, parsel: e.target.value })}
+                  placeholder="Parsel No"
+                  className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500' 
+                      : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Project Dropdown */}
+            <div>
+              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                Proje
+              </label>
+              <div className="relative">
+                <FolderOpen className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                <select
+                  value={filters.projectName}
+                  onChange={(e) => setFilters({ ...filters, projectName: e.target.value })}
+                  className={`w-full rounded-lg pl-9 pr-8 py-2.5 text-sm appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white' 
+                      : 'bg-white border border-gray-300 text-gray-900'
+                  }`}
+                >
+                  <option value="">Tümü</option>
+                  {projectNames.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+              </div>
+            </div>
+
+            {/* Worker Dropdown (Admin only) */}
+            {isAdmin && (
               <div>
-                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
                   Çalışan
                 </label>
                 <div className="relative">
@@ -524,88 +594,116 @@ const Dashboard: React.FC = () => {
                   <select
                     value={filters.workerEmail}
                     onChange={(e) => setFilters({ ...filters, workerEmail: e.target.value })}
-                    className={`w-full rounded-lg pl-10 pr-8 py-3 appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
+                    className={`w-full rounded-lg pl-9 pr-8 py-2.5 text-sm appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
                       isDark 
                         ? 'bg-slate-900/50 border border-slate-600 text-white' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900'
+                        : 'bg-white border border-gray-300 text-gray-900'
                     }`}
                   >
-                    <option value="">Tüm Çalışanlar</option>
-                    {workerEmails.map(email => (
-                      <option key={email} value={email}>{email}</option>
+                    <option value="">Tümü</option>
+                    {workerNames.map(worker => (
+                      <option key={worker.email} value={worker.email}>{worker.name}</option>
                     ))}
                   </select>
                   <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
                 </div>
               </div>
+            )}
 
-              {/* Proje Filtresi */}
-              <div>
-                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                  Proje
-                </label>
-                <div className="relative">
-                  <FolderOpen className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <select
-                    value={filters.projectName}
-                    onChange={(e) => setFilters({ ...filters, projectName: e.target.value })}
-                    className={`w-full rounded-lg pl-10 pr-8 py-3 appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900'
-                    }`}
-                  >
-                    <option value="">Tüm Projeler</option>
-                    {projectNames.map(name => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                </div>
-              </div>
-
-              {/* Başlangıç Tarihi */}
-              <div>
-                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                  Başlangıç Tarihi
-                </label>
-                <div className="relative">
-                  <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type="date"
-                    value={filters.dateFrom}
-                    onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                    className={`w-full rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-safety-orange transition-colors ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              {/* Bitiş Tarihi */}
-              <div>
-                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                  Bitiş Tarihi
-                </label>
-                <div className="relative">
-                  <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type="date"
-                    value={filters.dateTo}
-                    onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                    className={`w-full rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-safety-orange transition-colors ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900'
-                    }`}
-                  />
-                </div>
+            {/* Date Picker */}
+            <div>
+              <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                Tarih
+              </label>
+              <div className="relative">
+                <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value, dateTo: e.target.value })}
+                  className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white' 
+                      : 'bg-white border border-gray-300 text-gray-900'
+                  }`}
+                />
               </div>
             </div>
+
+            {/* Reset Button */}
+            <div className="flex items-end">
+              <button
+                onClick={clearFilters}
+                disabled={!hasActiveFilters}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  hasActiveFilters
+                    ? 'bg-safety-orange/20 text-safety-orange hover:bg-safety-orange/30'
+                    : isDark 
+                      ? 'bg-slate-800 text-concrete-400' 
+                      : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                <RotateCcw className="w-4 h-4" />
+                Sıfırla
+              </button>
+            </div>
           </div>
-        )}
+
+          {/* Active Filters Summary */}
+          {hasActiveFilters && (
+            <div className={`mt-3 pt-3 border-t flex items-center gap-2 flex-wrap ${isDark ? 'border-slate-700' : 'border-gray-300'}`}>
+              <span className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Aktif filtreler:</span>
+              {filters.searchQuery && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
+                  Arama: "{filters.searchQuery}"
+                  <button onClick={() => setFilters({ ...filters, searchQuery: '' })} className="hover:text-red-400">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {filters.ada && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
+                  Ada: {filters.ada}
+                  <button onClick={() => setFilters({ ...filters, ada: '' })} className="hover:text-red-400">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {filters.parsel && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
+                  Parsel: {filters.parsel}
+                  <button onClick={() => setFilters({ ...filters, parsel: '' })} className="hover:text-red-400">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {filters.projectName && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
+                  Proje: {filters.projectName}
+                  <button onClick={() => setFilters({ ...filters, projectName: '' })} className="hover:text-red-400">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {filters.workerEmail && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
+                  Çalışan: {workerNames.find(w => w.email === filters.workerEmail)?.name || filters.workerEmail}
+                  <button onClick={() => setFilters({ ...filters, workerEmail: '' })} className="hover:text-red-400">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {filters.dateFrom && (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700'}`}>
+                  Tarih: {new Date(filters.dateFrom).toLocaleDateString('tr-TR')}
+                  <button onClick={() => setFilters({ ...filters, dateFrom: '', dateTo: '' })} className="hover:text-red-400">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Notlar Gösterimi */}
         {loading ? (
@@ -635,13 +733,13 @@ const Dashboard: React.FC = () => {
                 ? 'Aradığınızı bulmak için filtreleri değiştirmeyi deneyin.'
                 : 'İlk notunuzu ekleyerek saha sorunlarını belgelemeye başlayın.'}
             </p>
-            {!isAdmin && !hasActiveFilters && (
+            {!hasActiveFilters && (
               <button
                 onClick={() => setShowAddModal(true)}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-safety-orange hover:bg-safety-orange-dark text-white font-semibold rounded-xl transition-colors"
               >
                 <Plus className="w-5 h-5" />
-                İlk Notunuzu Ekleyin
+                {isAdmin ? 'Yeni Not Ekle' : 'İlk Notunuzu Ekleyin'}
               </button>
             )}
           </div>
@@ -666,20 +764,19 @@ const Dashboard: React.FC = () => {
         )}
       </main>
 
-      {/* FAB - Not Ekle (Sadece Çalışanlar) */}
-      {!isAdmin && (
-        <button
-          onClick={() => setShowAddModal(true)}
-          disabled={uploading}
-          className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-safety-orange to-safety-orange-dark hover:from-safety-orange-dark hover:to-safety-orange text-white rounded-full shadow-industrial-lg flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 z-30"
-        >
-          {uploading ? (
-            <LoadingSpinner size="sm" />
-          ) : (
-            <Plus className="w-7 h-7" />
-          )}
-        </button>
-      )}
+      {/* FAB - Not Ekle (Çalışanlar ve Yöneticiler) */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        disabled={uploading}
+        className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-safety-orange to-safety-orange-dark hover:from-safety-orange-dark hover:to-safety-orange text-white rounded-full shadow-industrial-lg flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 z-30"
+        title="Yeni Not Ekle"
+      >
+        {uploading ? (
+          <LoadingSpinner size="sm" />
+        ) : (
+          <Plus className="w-7 h-7" />
+        )}
+      </button>
 
       {/* Modallar */}
       <AddNoteModal

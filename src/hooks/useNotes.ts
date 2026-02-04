@@ -148,11 +148,12 @@ export const useNotes = () => {
       const noteData = {
         userId: currentUser.uid,
         userEmail: currentUser.email || '',
-        userName: userProfile.displayName,
+        userName: userProfile.displayName || '',
+        userRole: userProfile.role || 'worker',  // Track who created the note
         imageUrls,  // New array field
-        title: formData.title,
-        content: formData.content,
-        projectName: formData.projectName,
+        title: formData.title || '',
+        content: formData.content || '',
+        projectName: formData.projectName || '',
         ada: formData.ada || '',
         parsel: formData.parsel || '',
         customFields: formData.customFields || [],
@@ -187,28 +188,34 @@ export const useNotes = () => {
 
     try {
       const noteRef = doc(db, 'notes', noteId);
-      const updateData: Record<string, unknown> = {
-        ...formData,
+      
+      // Sanitize form data - ensure no undefined values
+      const sanitizedData: Record<string, unknown> = {
         updatedAt: Timestamp.now(),
         lastEditedBy: currentUser.uid,
-        lastEditedByName: userProfile.displayName
+        lastEditedByName: userProfile.displayName || ''
       };
+
+      // Only add fields that are defined
+      if (formData.title !== undefined) sanitizedData.title = formData.title || '';
+      if (formData.content !== undefined) sanitizedData.content = formData.content || '';
+      if (formData.projectName !== undefined) sanitizedData.projectName = formData.projectName || '';
+      if (formData.ada !== undefined) sanitizedData.ada = formData.ada || '';
+      if (formData.parsel !== undefined) sanitizedData.parsel = formData.parsel || '';
+      if (formData.customFields !== undefined) sanitizedData.customFields = formData.customFields || [];
 
       // Handle images
       if (newImages && newImages.length > 0) {
         // Upload new images
         const newImageUrls = await uploadImages(newImages);
         // Combine with existing images if any
-        updateData.imageUrls = [...(existingImageUrls || []), ...newImageUrls];
+        sanitizedData.imageUrls = [...(existingImageUrls || []), ...newImageUrls];
       } else if (existingImageUrls !== undefined) {
         // Only existing images (some may have been removed)
-        updateData.imageUrls = existingImageUrls;
+        sanitizedData.imageUrls = existingImageUrls;
       }
 
-      // Remove images field if it exists (we use imageUrls)
-      delete updateData.images;
-
-      await updateDoc(noteRef, updateData);
+      await updateDoc(noteRef, sanitizedData);
     } catch (err) {
       console.error('Error updating note:', err);
       setError('Failed to update note. Please try again.');
@@ -254,14 +261,40 @@ export const useNotes = () => {
   // Filter notes (client-side for admin dashboard)
   const filterNotes = useCallback((filters: FilterOptions): Note[] => {
     return notes.filter((note) => {
+      // Search filter - check title and content (case-insensitive)
+      if (filters.searchQuery) {
+        const searchLower = filters.searchQuery.toLowerCase();
+        const titleMatch = (note.title || '').toLowerCase().includes(searchLower);
+        const contentMatch = (note.content || '').toLowerCase().includes(searchLower);
+        if (!titleMatch && !contentMatch) {
+          return false;
+        }
+      }
+
       // Filter by worker email
       if (filters.workerEmail && !note.userEmail.toLowerCase().includes(filters.workerEmail.toLowerCase())) {
         return false;
       }
 
       // Filter by project name
-      if (filters.projectName && !note.projectName.toLowerCase().includes(filters.projectName.toLowerCase())) {
+      if (filters.projectName && note.projectName !== filters.projectName) {
         return false;
+      }
+
+      // Filter by Ada (partial match)
+      if (filters.ada) {
+        const noteAda = (note.ada || '').toLowerCase();
+        if (!noteAda.includes(filters.ada.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Filter by Parsel (partial match)
+      if (filters.parsel) {
+        const noteParsel = (note.parsel || '').toLowerCase();
+        if (!noteParsel.includes(filters.parsel.toLowerCase())) {
+          return false;
+        }
       }
 
       // Filter by date range
@@ -297,6 +330,31 @@ export const useNotes = () => {
   const getWorkerEmails = useCallback((): string[] => {
     const emails = new Set(notes.map(note => note.userEmail));
     return Array.from(emails).sort();
+  }, [notes]);
+
+  // Get unique worker names with their emails for filter dropdown
+  const getWorkerNames = useCallback((): { name: string; email: string }[] => {
+    const workersMap = new Map<string, string>();
+    notes.forEach(note => {
+      if (!workersMap.has(note.userEmail)) {
+        workersMap.set(note.userEmail, note.userName || note.userEmail);
+      }
+    });
+    return Array.from(workersMap.entries())
+      .map(([email, name]) => ({ email, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  }, [notes]);
+
+  // Get unique Ada values for filter dropdown
+  const getAdaValues = useCallback((): string[] => {
+    const adas = new Set(notes.map(note => note.ada).filter(Boolean));
+    return Array.from(adas).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
+  }, [notes]);
+
+  // Get unique Parsel values for filter dropdown
+  const getParselValues = useCallback((): string[] => {
+    const parsels = new Set(notes.map(note => note.parsel).filter(Boolean));
+    return Array.from(parsels).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
   }, [notes]);
 
   // Update note status (Admin only)
@@ -424,6 +482,9 @@ export const useNotes = () => {
     filterNotes,
     getProjectNames,
     getWorkerEmails,
+    getWorkerNames,
+    getAdaValues,
+    getParselValues,
     getKPIStats
   };
 };
