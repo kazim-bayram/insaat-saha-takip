@@ -81,7 +81,7 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
       // Generate email from username with @insaat.local domain
       const email = `${username.toLowerCase()}@insaat.local`;
 
-      // Create a secondary Firebase app instance
+      // Create a secondary Firebase app instance for authentication only
       const secondaryAppName = 'SecondaryApp';
       
       // Check if secondary app already exists and delete it
@@ -91,29 +91,42 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
         await deleteApp(existingSecondary);
       }
 
-      // Initialize secondary app
+      // Initialize secondary app (only for authentication)
       const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
       const secondaryAuth = getAuth(secondaryApp);
 
-      // Create user with secondary auth (doesn't affect admin session)
+      // STEP 1: Create user with secondary auth (doesn't affect admin session)
       const userCredential = await createUserWithEmailAndPassword(
         secondaryAuth,
         email,
         password
       );
 
-      // Create user profile in Firestore using MAIN db instance
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        uid: userCredential.user.uid,
-        email: email,
-        username: username.toLowerCase(),
-        displayName: displayName,
-        role: role,
-        isActive: true, // Default to active
-        createdAt: serverTimestamp()
-      });
+      // STEP 2: Create user profile in Firestore using MAIN db instance
+      // This uses the admin's authentication context, not the new user's
+      try {
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          uid: userCredential.user.uid,
+          email: email,
+          username: username.toLowerCase(),
+          displayName: displayName,
+          role: role,
+          isActive: true, // Default to active
+          createdAt: serverTimestamp()
+        });
+      } catch (firestoreError: any) {
+        // If Firestore write fails, clean up the auth user
+        console.error('Firestore write failed:', firestoreError);
+        try {
+          // Delete the auth user since we couldn't create the profile
+          await secondaryAuth.currentUser?.delete();
+        } catch (deleteError) {
+          console.error('Failed to cleanup auth user:', deleteError);
+        }
+        throw new Error('Profil oluşturulamadı. Lütfen Firestore kurallarını kontrol edin veya tekrar deneyin.');
+      }
 
-      // Sign out from secondary auth and clean up
+      // STEP 3: Sign out from secondary auth and clean up
       await signOut(secondaryAuth);
       await deleteApp(secondaryApp);
 

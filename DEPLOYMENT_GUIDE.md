@@ -97,7 +97,29 @@ npm install
 
 This will install `firebase-admin` (now in production dependencies).
 
-### Step 2: Configure Environment Variables
+### Step 2: Update Firestore Security Rules
+
+**IMPORTANT:** Deploy the updated Firestore rules to allow admins to create user profiles.
+
+1. Go to Firebase Console → Firestore Database → Rules
+2. The `firestore.rules` file in your project has been updated
+3. Deploy the rules:
+
+```bash
+# If you have Firebase CLI installed:
+firebase deploy --only firestore:rules
+
+# Or manually copy the rules from firestore.rules and paste in Firebase Console
+```
+
+**Key Change:** Added `|| isAdmin()` to the create rule:
+```javascript
+allow create: if isOwner(userId) || isAdmin();
+```
+
+This allows admins to create user profiles for other users (required for the Add User feature).
+
+### Step 3: Configure Environment Variables
 
 Create a `.env` file (use `.env.example` as template):
 
@@ -117,7 +139,7 @@ VITE_API_BASE_URL=https://your-domain.vercel.app/api
 ALLOWED_ORIGIN=https://your-domain.vercel.app
 ```
 
-### Step 3: Prepare Service Account Key
+### Step 4: Prepare Service Account Key
 
 Convert your Firebase service account JSON to a **single-line string**:
 
@@ -135,7 +157,7 @@ Copy the output - you'll need it for Vercel environment variables.
 
 ## 🎨 Frontend Configuration
 
-### Update CORS Settings
+### Step 5: Update CORS Settings
 
 Edit `vercel.json` to match your production domain:
 
@@ -153,7 +175,7 @@ Edit `vercel.json` to match your production domain:
 }
 ```
 
-### Update API Base URL
+### Step 6: Update API Base URL
 
 For **local development**, the API defaults to `/api` (proxied by Vite).
 
@@ -400,6 +422,11 @@ Track authentication events:
 
 ## 🐛 Troubleshooting
 
+### "Profile save failed" when adding user
+- **Cause:** Firestore security rules not allowing admin to create user profiles
+- **Fix:** Deploy updated `firestore.rules` with `allow create: if isOwner(userId) || isAdmin();`
+- **Deploy:** `firebase deploy --only firestore:rules` or update manually in Firebase Console
+
 ### "Missing or invalid authorization header"
 - **Cause:** Frontend not sending ID token
 - **Fix:** Check that admin is logged in and token is being fetched in `adminApi.ts`
@@ -419,6 +446,10 @@ Track authentication events:
 ### "auth/email-already-in-use" when creating user
 - **Cause:** Username already exists
 - **Fix:** Choose a different username (system checks before creating)
+
+### "Permission denied" on Firestore operations
+- **Cause:** Security rules too restrictive or auth context incorrect
+- **Fix:** Review `firestore.rules` and ensure rules match your use case. For admin operations, make sure `isAdmin()` is included in the rule.
 
 ---
 
