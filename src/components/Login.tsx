@@ -455,8 +455,7 @@ const Login: React.FC = () => {
 
         {/* Alt Yazı */}
         <p className={`text-center text-sm mt-6 ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
-          Saha Belgeleme
-        </p>
+          Saha Belgeleme Sitesi
       </div>
     </div>
   );
