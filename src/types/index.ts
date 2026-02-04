@@ -67,6 +67,7 @@ export const NOTE_STATUS_CONFIG: Record<NoteStatus, StatusConfig> = {
 export interface UserProfile {
   uid: string;
   email: string;
+  username: string;
   displayName: string;
   role: UserRole;
   createdAt: Timestamp;

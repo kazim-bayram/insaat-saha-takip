@@ -1,19 +1,47 @@
 import React, { useState } from 'react';
-import { HardHat, Mail, Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon } from 'lucide-react';
+import { HardHat, Mail, Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon, AtSign, CheckCircle2, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Login: React.FC = () => {
   const [isRegister, setIsRegister] = useState(false);
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
 
-  const { login, register } = useAuth();
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { login, register, checkUsernameAvailable } = useAuth();
+  const { toggleTheme, isDark } = useTheme();
+
+  // Debounced username check
+  const handleUsernameChange = async (value: string) => {
+    setUsername(value);
+    
+    if (!value.trim() || value.length < 3) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    // Validate username format (alphanumeric and underscores only)
+    if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    setUsernameStatus('checking');
+    
+    try {
+      const isAvailable = await checkUsernameAvailable(value);
+      setUsernameStatus(isAvailable ? 'available' : 'taken');
+    } catch {
+      setUsernameStatus('idle');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,21 +53,33 @@ const Login: React.FC = () => {
         if (!displayName.trim()) {
           throw new Error('Lütfen adınızı girin');
         }
-        await register(email, password, displayName);
+        if (!username.trim() || username.length < 3) {
+          throw new Error('Kullanıcı adı en az 3 karakter olmalıdır');
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+          throw new Error('Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir');
+        }
+        if (usernameStatus === 'taken') {
+          throw new Error('Bu kullanıcı adı zaten kullanılıyor');
+        }
+        await register(email, password, displayName, username);
       } else {
-        await login(email, password);
+        // Smart login - email OR username
+        await login(emailOrUsername, password);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Kimlik doğrulama başarısız';
       // Firebase hatalarını kullanıcı dostu mesajlara çevir
       if (message.includes('auth/invalid-credential')) {
-        setError('Geçersiz e-posta veya şifre. Lütfen tekrar deneyin.');
+        setError('Geçersiz kimlik bilgileri. Lütfen tekrar deneyin.');
       } else if (message.includes('auth/email-already-in-use')) {
         setError('Bu e-posta zaten kayıtlı. Lütfen giriş yapın.');
       } else if (message.includes('auth/weak-password')) {
         setError('Şifre en az 6 karakter olmalıdır.');
       } else if (message.includes('auth/invalid-email')) {
         setError('Lütfen geçerli bir e-posta adresi girin.');
+      } else if (message.includes('Kullanıcı bulunamadı')) {
+        setError('Kullanıcı bulunamadı. E-posta veya kullanıcı adınızı kontrol edin.');
       } else {
         setError(message);
       }
@@ -135,27 +175,99 @@ const Login: React.FC = () => {
               </div>
             )}
 
-            {/* E-posta Alanı */}
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                E-posta Adresi
-              </label>
-              <div className="relative">
-                <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ornek@sirket.com"
-                  className={`w-full rounded-xl pl-12 pr-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                    isDark 
-                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                      : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                  }`}
-                  required
-                />
+            {/* Kullanıcı Adı (Sadece Kayıt) */}
+            {isRegister && (
+              <div className="animate-slide-up">
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  Kullanıcı Adı
+                </label>
+                <div className="relative">
+                  <AtSign className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => handleUsernameChange(e.target.value.toLowerCase())}
+                    placeholder="ahmet_yilmaz"
+                    className={`w-full rounded-xl pl-12 pr-12 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    } ${usernameStatus === 'taken' ? 'border-red-500' : ''} ${usernameStatus === 'available' ? 'border-green-500' : ''}`}
+                    required={isRegister}
+                    minLength={3}
+                  />
+                  {/* Username status indicator */}
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {usernameStatus === 'checking' && (
+                      <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+                    )}
+                    {usernameStatus === 'available' && (
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    )}
+                    {usernameStatus === 'taken' && (
+                      <XCircle className="w-5 h-5 text-red-500" />
+                    )}
+                  </div>
+                </div>
+                {usernameStatus === 'taken' && (
+                  <p className="text-red-400 text-xs mt-1">Bu kullanıcı adı zaten kullanılıyor</p>
+                )}
+                {usernameStatus === 'available' && (
+                  <p className="text-green-400 text-xs mt-1">Kullanıcı adı müsait</p>
+                )}
+                <p className={`text-xs mt-1 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                  Sadece harf, rakam ve alt çizgi (_) kullanabilirsiniz
+                </p>
               </div>
-            </div>
+            )}
+
+            {/* E-posta veya Kullanıcı Adı (Sadece Giriş) */}
+            {!isRegister && (
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  E-posta veya Kullanıcı Adı
+                </label>
+                <div className="relative">
+                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  <input
+                    type="text"
+                    value={emailOrUsername}
+                    onChange={(e) => setEmailOrUsername(e.target.value)}
+                    placeholder="ornek@sirket.com veya kullanici_adi"
+                    className={`w-full rounded-xl pl-12 pr-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    }`}
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* E-posta Alanı (Sadece Kayıt) */}
+            {isRegister && (
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  E-posta Adresi
+                </label>
+                <div className="relative">
+                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="ornek@sirket.com"
+                    className={`w-full rounded-xl pl-12 pr-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    }`}
+                    required
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Şifre Alanı */}
             <div>
@@ -214,6 +326,13 @@ const Login: React.FC = () => {
                 onClick={() => {
                   setIsRegister(!isRegister);
                   setError(null);
+                  // Reset fields when switching
+                  setEmailOrUsername('');
+                  setEmail('');
+                  setUsername('');
+                  setPassword('');
+                  setDisplayName('');
+                  setUsernameStatus('idle');
                 }}
                 className="ml-2 text-safety-orange hover:text-safety-orange-light font-medium transition-colors"
               >
