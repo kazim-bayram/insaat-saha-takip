@@ -403,9 +403,9 @@ export const useNotes = () => {
   // Check if user can delete a note
   const canDeleteNote = useCallback((note: Note): boolean => {
     if (!currentUser) return false;
-    // Only note owner can delete (or admin if needed)
-    return note.userId === currentUser.uid;
-  }, [currentUser]);
+    // Admin can delete any note, workers can only delete their own
+    return isAdmin || note.userId === currentUser.uid;
+  }, [currentUser, isAdmin]);
 
   return {
     notes,
