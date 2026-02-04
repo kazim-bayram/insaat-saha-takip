@@ -6,11 +6,9 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
-  updateEmail as firebaseUpdateEmail,
   updatePassword as firebaseUpdatePassword,
   reauthenticateWithCredential,
-  EmailAuthProvider,
-  sendPasswordResetEmail
+  EmailAuthProvider
 } from 'firebase/auth';
 import { 
   doc, 
@@ -30,19 +28,17 @@ interface AuthContextType {
   currentUser: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
-  login: (emailOrUsername: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string, username: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string, displayName: string, role?: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   isAdmin: boolean;
   // Profile management functions
   checkUsernameAvailable: (username: string, excludeUid?: string) => Promise<boolean>;
   updateUserProfile: (data: { displayName?: string; username?: string }) => Promise<void>;
-  updateUserEmail: (newEmail: string, currentPassword: string) => Promise<void>;
   updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
   // Admin functions
   getAllUsers: () => Promise<UserProfile[]>;
   updateUserRole: (userId: string, newRole: UserRole) => Promise<void>;
-  sendPasswordReset: (email: string) => Promise<void>;
   refreshUserProfile: () => Promise<void>;
 }
 
@@ -90,13 +86,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   ): Promise<UserProfile> => {
     const userDocRef = doc(db, 'users', user.uid);
     
-    // Create user document with server timestamp
+    // Create user document with server timestamp and isActive flag
     await setDoc(userDocRef, {
       uid: user.uid,
       email: user.email || '',
       username: username.toLowerCase(),
       displayName,
       role,
+      isActive: true, // Default to active
       createdAt: serverTimestamp()
     });
 
@@ -121,51 +118,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return false;
   };
 
-  // Get email by username for smart login
-  const getEmailByUsername = async (username: string): Promise<string | null> => {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('username', '==', username.toLowerCase()));
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) return null;
-    
-    const userData = snapshot.docs[0].data();
-    return userData.email || null;
-  };
-
-  // Smart Login function - accepts email OR username
-  const login = async (emailOrUsername: string, password: string): Promise<void> => {
-    let email = emailOrUsername;
-    
-    // If input doesn't contain '@', treat as username
-    if (!emailOrUsername.includes('@')) {
-      const foundEmail = await getEmailByUsername(emailOrUsername);
-      if (!foundEmail) {
-        throw new Error('Kullanıcı bulunamadı');
-      }
-      email = foundEmail;
-    }
+  // Username-only login - automatically appends @insaat.local
+  const login = async (username: string, password: string): Promise<void> => {
+    // Append @insaat.local domain to username
+    const email = `${username.toLowerCase()}@insaat.local`;
     
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const profile = await fetchUserProfile(userCredential.user);
+    
+    // Check if user account is active
+    if (profile && profile.isActive === false) {
+      // User is disabled - sign out immediately
+      await signOut(auth);
+      throw new Error('Hesap erişime kapatılmıştır. Lütfen yönetici ile iletişime geçin.');
+    }
+    
     setUserProfile(profile);
   };
 
-  // Register function with username
-  const register = async (email: string, password: string, displayName: string, username: string): Promise<void> => {
+  // Register function with username (automatically generates @insaat.local email)
+  const register = async (username: string, password: string, displayName: string, role: UserRole = 'worker'): Promise<void> => {
     // Check username availability first
     const isAvailable = await checkUsernameAvailable(username);
     if (!isAvailable) {
       throw new Error('Bu kullanıcı adı zaten kullanılıyor');
     }
     
+    // Generate email from username
+    const email = `${username.toLowerCase()}@insaat.local`;
+    
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     
     // Update display name in Firebase Auth
     await updateProfile(userCredential.user, { displayName });
     
-    // Create user profile in Firestore with username
-    const profile = await createUserProfile(userCredential.user, displayName, username, 'worker');
+    // Create user profile in Firestore with username and isActive: true
+    const profile = await createUserProfile(userCredential.user, displayName, username, role);
     setUserProfile(profile);
   };
 
@@ -210,27 +198,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Update user email (requires re-authentication)
-  const updateUserEmail = async (newEmail: string, currentPassword: string): Promise<void> => {
-    if (!currentUser || !currentUser.email) {
-      throw new Error('User not authenticated');
-    }
-
-    // Re-authenticate user first
-    const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
-    await reauthenticateWithCredential(currentUser, credential);
-
-    // Update email in Firebase Auth
-    await firebaseUpdateEmail(currentUser, newEmail);
-
-    // Update email in Firestore
-    const userDocRef = doc(db, 'users', currentUser.uid);
-    await updateDoc(userDocRef, { email: newEmail });
-
-    // Refresh profile
-    const updatedProfile = await fetchUserProfile(currentUser);
-    setUserProfile(updatedProfile);
-  };
+  // Email update removed - username-only system
 
   // Update user password (requires re-authentication)
   const updateUserPassword = async (currentPassword: string, newPassword: string): Promise<void> => {
@@ -267,10 +235,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     await updateDoc(userDocRef, { role: newRole });
   };
 
-  // Send password reset email (Admin function)
-  const sendPasswordReset = async (email: string): Promise<void> => {
-    await sendPasswordResetEmail(auth, email);
-  };
+  // Password reset removed - handled by backend admin API
 
   // Refresh user profile
   const refreshUserProfile = async (): Promise<void> => {
@@ -287,7 +252,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (user) {
         const profile = await fetchUserProfile(user);
-        setUserProfile(profile);
+        
+        // Additional security check: if user is marked inactive, sign them out
+        if (profile && profile.isActive === false) {
+          await signOut(auth);
+          setUserProfile(null);
+          setCurrentUser(null);
+        } else {
+          setUserProfile(profile);
+        }
       } else {
         setUserProfile(null);
       }
@@ -309,12 +282,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Profile management functions
     checkUsernameAvailable,
     updateUserProfile,
-    updateUserEmail,
     updateUserPassword,
     // Admin functions
     getAllUsers,
     updateUserRole,
-    sendPasswordReset,
     refreshUserProfile
   };
 

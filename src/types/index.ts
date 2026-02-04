@@ -71,6 +71,7 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   createdAt: Timestamp;
+  isActive?: boolean; // For soft delete - false means disabled
 }
 
 // Custom field for dynamic key-value pairs

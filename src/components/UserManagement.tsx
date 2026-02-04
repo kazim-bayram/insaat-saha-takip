@@ -11,14 +11,19 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
-  Send,
   AtSign,
-  UserPlus
+  UserPlus,
+  Key,
+  Trash2,
+  UserCheck,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile, UserRole } from '../types';
 import AddUserModal from './AddUserModal';
+import { adminResetPassword, adminDeleteUser, adminRestoreUser } from '../services/adminApi';
 
 interface UserManagementProps {
   isOpen: boolean;
@@ -32,16 +37,25 @@ interface Toast {
 
 const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
   const { isDark } = useTheme();
-  const { getAllUsers, updateUserRole, sendPasswordReset, userProfile: currentUser } = useAuth();
+  const { getAllUsers, updateUserRole, userProfile: currentUser } = useAuth();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-  const [sendingResetTo, setSendingResetTo] = useState<string | null>(null);
   const [showRoleDropdown, setShowRoleDropdown] = useState<string | null>(null);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  
+  // Password reset modal state
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<UserProfile | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  
+  // Delete/Restore state
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   // Fetch users on mount
   useEffect(() => {
@@ -99,16 +113,78 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleSendPasswordReset = async (user: UserProfile) => {
-    setSendingResetTo(user.uid);
+  const handleOpenPasswordResetModal = (user: UserProfile) => {
+    setResetPasswordUser(user);
+    setNewPassword('');
+    setShowPasswordResetModal(true);
+  };
+
+  const handlePasswordReset = async () => {
+    if (!resetPasswordUser || !newPassword) return;
+    
+    if (newPassword.length < 6) {
+      setToast({ type: 'error', message: 'Şifre en az 6 karakter olmalıdır' });
+      return;
+    }
+
+    setResettingPassword(true);
 
     try {
-      await sendPasswordReset(user.email);
-      setToast({ type: 'success', message: `Şifre sıfırlama e-postası ${user.email} adresine gönderildi` });
+      await adminResetPassword(resetPasswordUser.uid, newPassword);
+      setToast({ type: 'success', message: `${resetPasswordUser.displayName} kullanıcısının şifresi başarıyla değiştirildi` });
+      setShowPasswordResetModal(false);
+      setResetPasswordUser(null);
+      setNewPassword('');
     } catch (err) {
-      setToast({ type: 'error', message: 'E-posta gönderilemedi' });
+      const message = err instanceof Error ? err.message : 'Şifre değiştirilemedi';
+      setToast({ type: 'error', message });
     } finally {
-      setSendingResetTo(null);
+      setResettingPassword(false);
+    }
+  };
+
+  const handleDeleteUser = async (user: UserProfile) => {
+    if (user.uid === currentUser?.uid) {
+      setToast({ type: 'error', message: 'Kendi hesabınızı silemezsiniz' });
+      return;
+    }
+
+    if (!confirm(`${user.displayName} kullanıcısını devre dışı bırakmak istediğinize emin misiniz? Bu kullanıcı artık giriş yapamayacak.`)) {
+      return;
+    }
+
+    setDeletingUserId(user.uid);
+
+    try {
+      await adminDeleteUser(user.uid);
+      // Update local state
+      setUsers(prev => prev.map(u => 
+        u.uid === user.uid ? { ...u, isActive: false } : u
+      ));
+      setToast({ type: 'success', message: `${user.displayName} devre dışı bırakıldı` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Kullanıcı devre dışı bırakılamadı';
+      setToast({ type: 'error', message });
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
+  const handleRestoreUser = async (user: UserProfile) => {
+    setDeletingUserId(user.uid);
+
+    try {
+      await adminRestoreUser(user.uid);
+      // Update local state
+      setUsers(prev => prev.map(u => 
+        u.uid === user.uid ? { ...u, isActive: true } : u
+      ));
+      setToast({ type: 'success', message: `${user.displayName} tekrar aktif edildi` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Kullanıcı aktif edilemedi';
+      setToast({ type: 'error', message });
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -259,7 +335,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
                     {filteredUsers.map((user) => (
                       <tr key={user.uid} className={`${
                         isDark ? 'hover:bg-slate-800/50' : 'hover:bg-gray-50'
-                      } transition-colors`}>
+                      } transition-colors ${user.isActive === false ? 'opacity-50' : ''}`}>
                         {/* User Info */}
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
@@ -279,6 +355,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
                                 {user.displayName || 'İsimsiz'}
                                 {user.uid === currentUser?.uid && (
                                   <span className={`ml-2 text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>(Siz)</span>
+                                )}
+                                {user.isActive === false && (
+                                  <span className={`ml-2 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-red-600/20 text-red-400' : 'bg-red-100 text-red-700'}`}>Devre Dışı</span>
                                 )}
                               </p>
                               <p className={`text-sm flex items-center gap-1 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
@@ -363,22 +442,58 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
 
                         {/* Actions */}
                         <td className="px-4 py-4">
-                          <button
-                            onClick={() => handleSendPasswordReset(user)}
-                            disabled={sendingResetTo === user.uid}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                              isDark
-                                ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
-                                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                            } disabled:opacity-50`}
-                          >
-                            {sendingResetTo === user.uid ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <div className="flex items-center gap-2">
+                            {/* Password Reset Button */}
+                            <button
+                              onClick={() => handleOpenPasswordResetModal(user)}
+                              disabled={user.isActive === false}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                                isDark
+                                  ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
+                                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              } disabled:opacity-30 disabled:cursor-not-allowed`}
+                              title="Şifre Değiştir"
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                            </button>
+                            
+                            {/* Delete/Restore Button */}
+                            {user.isActive === false ? (
+                              <button
+                                onClick={() => handleRestoreUser(user)}
+                                disabled={deletingUserId === user.uid}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                                  isDark
+                                    ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
+                                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                } disabled:opacity-50`}
+                                title="Aktif Et"
+                              >
+                                {deletingUserId === user.uid ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                )}
+                              </button>
                             ) : (
-                              <Send className="w-3.5 h-3.5" />
+                              <button
+                                onClick={() => handleDeleteUser(user)}
+                                disabled={deletingUserId === user.uid || user.uid === currentUser?.uid}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                                  isDark
+                                    ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
+                                    : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                } disabled:opacity-30 disabled:cursor-not-allowed`}
+                                title="Devre Dışı Bırak"
+                              >
+                                {deletingUserId === user.uid ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
                             )}
-                            Şifre Sıfırla
-                          </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -395,7 +510,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
                       isDark 
                         ? 'bg-slate-800/50 border-slate-700/50' 
                         : 'bg-gray-50 border-gray-200'
-                    }`}
+                    } ${user.isActive === false ? 'opacity-50' : ''}`}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -415,6 +530,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
                             {user.displayName || 'İsimsiz'}
                             {user.uid === currentUser?.uid && (
                               <span className={`ml-2 text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>(Siz)</span>
+                            )}
+                            {user.isActive === false && (
+                              <span className={`ml-2 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-red-600/20 text-red-400' : 'bg-red-100 text-red-700'}`}>Devre Dışı</span>
                             )}
                           </p>
                           <p className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
@@ -448,12 +566,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
                       {user.uid !== currentUser?.uid && (
                         <button
                           onClick={() => handleRoleChange(user.uid, user.role === 'admin' ? 'worker' : 'admin')}
-                          disabled={updatingUserId === user.uid}
+                          disabled={updatingUserId === user.uid || user.isActive === false}
                           className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
                             isDark
                               ? 'bg-slate-700 text-concrete-300 hover:bg-slate-600'
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          } disabled:opacity-50`}
+                          } disabled:opacity-30`}
                         >
                           {updatingUserId === user.uid ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -466,23 +584,56 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
                         </button>
                       )}
                       <button
-                        onClick={() => handleSendPasswordReset(user)}
-                        disabled={sendingResetTo === user.uid}
+                        onClick={() => handleOpenPasswordResetModal(user)}
+                        disabled={user.isActive === false}
                         className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
                           isDark
                             ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
                             : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                        } disabled:opacity-50`}
+                        } disabled:opacity-30`}
                       >
-                        {sendingResetTo === user.uid ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <>
-                            <Send className="w-3.5 h-3.5" />
-                            Şifre Sıfırla
-                          </>
-                        )}
+                        <Key className="w-3.5 h-3.5" />
+                        Şifre Değiştir
                       </button>
+                      {user.isActive === false ? (
+                        <button
+                          onClick={() => handleRestoreUser(user)}
+                          disabled={deletingUserId === user.uid}
+                          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                            isDark
+                              ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
+                              : 'bg-green-100 text-green-700 hover:bg-green-200'
+                          } disabled:opacity-50`}
+                        >
+                          {deletingUserId === user.uid ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <UserCheck className="w-3.5 h-3.5" />
+                              Aktif Et
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleDeleteUser(user)}
+                          disabled={deletingUserId === user.uid || user.uid === currentUser?.uid}
+                          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                            isDark
+                              ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
+                              : 'bg-red-100 text-red-700 hover:bg-red-200'
+                          } disabled:opacity-30`}
+                        >
+                          {deletingUserId === user.uid ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Devre Dışı Bırak
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -501,6 +652,134 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
           setToast({ type: 'success', message: 'Yeni kullanıcı başarıyla oluşturuldu' });
         }}
       />
+
+      {/* Password Reset Modal */}
+      {showPasswordResetModal && resetPasswordUser && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !resettingPassword) {
+              setShowPasswordResetModal(false);
+              setResetPasswordUser(null);
+              setNewPassword('');
+            }
+          }}
+        >
+          <div className={`rounded-2xl max-w-md w-full shadow-2xl border animate-slide-up ${
+            isDark 
+              ? 'bg-slate-850 border-slate-700/50' 
+              : 'bg-white border-gray-200'
+          }`}>
+            {/* Header */}
+            <div className={`flex items-center justify-between p-4 border-b ${
+              isDark ? 'border-slate-700/50' : 'border-gray-200'
+            }`}>
+              <div>
+                <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Şifre Değiştir
+                </h2>
+                <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                  {resetPasswordUser.displayName} - @{resetPasswordUser.username}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPasswordResetModal(false);
+                  setResetPasswordUser(null);
+                  setNewPassword('');
+                }}
+                disabled={resettingPassword}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDark 
+                    ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
+                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className={`p-3 rounded-xl border ${isDark ? 'bg-yellow-600/10 border-yellow-500/30' : 'bg-yellow-50 border-yellow-200'}`}>
+                <p className={`text-xs ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                  <strong>Uyarı:</strong> Yeni şifreyi kullanıcıya güvenli bir şekilde iletmeyi unutmayın.
+                </p>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  Yeni Şifre *
+                </label>
+                <div className="relative">
+                  <Key className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="En az 6 karakter"
+                    className={`w-full rounded-xl pl-12 pr-12 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    }`}
+                    required
+                    minLength={6}
+                    disabled={resettingPassword}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}
+                    disabled={resettingPassword}
+                  >
+                    {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                <p className={`text-xs mt-1 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                  Minimum 6 karakter
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowPasswordResetModal(false);
+                    setResetPasswordUser(null);
+                    setNewPassword('');
+                  }}
+                  disabled={resettingPassword}
+                  className={`flex-1 px-4 py-3 rounded-xl font-medium transition-colors ${
+                    isDark
+                      ? 'bg-slate-700 text-white hover:bg-slate-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  } disabled:opacity-50`}
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={handlePasswordReset}
+                  disabled={resettingPassword || !newPassword || newPassword.length < 6}
+                  className="flex-1 flex items-center justify-center gap-2 bg-safety-orange hover:bg-safety-orange-dark text-white font-semibold py-3 px-4 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {resettingPassword ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Değiştiriliyor...
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-5 h-5" />
+                      Şifreyi Değiştir
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

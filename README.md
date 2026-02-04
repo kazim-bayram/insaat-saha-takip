@@ -4,6 +4,9 @@ A professional field note documentation app for construction sites, built with R
 
 ![SiteNotes Banner](https://via.placeholder.com/800x400/1a2332/FF6B00?text=SiteNotes+-+Field+Documentation)
 
+> **🎉 NEW in v2.0.0:** Backend API integration, username-only authentication, and enhanced admin security!  
+> **[📖 View Upgrade Guide](./UPGRADE_SUMMARY.md)** | **[🚀 Quick Start](./QUICK_START.md)** | **[📦 Deployment Guide](./DEPLOYMENT_GUIDE.md)**
+
 ## ✨ Features
 
 ### For Field Workers
@@ -18,21 +21,28 @@ A professional field note documentation app for construction sites, built with R
 - 🔎 **Advanced Filters** - Filter by worker, project, or date range
 - 📋 **Full Details** - View complete note information with images
 - 👥 **Team Oversight** - Monitor field documentation activity
+- 🔐 **User Management** - Add users, reset passwords, disable accounts (v2.0+)
+- 🔑 **Admin Password Reset** - Force update any user's password (v2.0+)
+- 🗑️ **Soft Delete Users** - Disable accounts without losing data (v2.0+)
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 18 + TypeScript + Vite
 - **Styling**: TailwindCSS (custom industrial theme)
-- **Backend**: Firebase (Auth, Firestore, Storage)
+- **Backend**: Firebase (Auth, Firestore, Storage) + Vercel Serverless Functions (v2.0+)
+- **Admin SDK**: Firebase Admin SDK for privileged operations (v2.0+)
 - **OCR**: Tesseract.js (client-side, offline-capable)
 - **Icons**: Lucide React
 
 ## 🚀 Getting Started
 
+> **⚡ IMPORTANT:** For v2.0 with backend features, follow **[QUICK_START.md](./QUICK_START.md)** instead!
+
 ### Prerequisites
 
 - Node.js 18+ and npm
 - A Firebase project
+- Vercel account (for backend API, v2.0+)
 
 ### 1. Clone & Install
 

@@ -21,7 +21,7 @@ interface ProfileSettingsProps {
   onClose: () => void;
 }
 
-type TabType = 'profile' | 'email' | 'password';
+type TabType = 'profile' | 'password';
 
 interface Toast {
   type: 'success' | 'error';
@@ -34,7 +34,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
     userProfile, 
     checkUsernameAvailable, 
     updateUserProfile,
-    updateUserEmail,
     updateUserPassword
   } = useAuth();
 
@@ -47,10 +46,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'same'>('idle');
   const [profileLoading, setProfileLoading] = useState(false);
 
-  // Email tab state
-  const [newEmail, setNewEmail] = useState('');
-  const [emailPassword, setEmailPassword] = useState('');
-  const [emailLoading, setEmailLoading] = useState(false);
+  // Email tab removed - username-only system
 
   // Password tab state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -64,7 +60,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
     if (userProfile) {
       setDisplayName(userProfile.displayName || '');
       setUsername(userProfile.username || '');
-      setNewEmail(userProfile.email || '');
     }
   }, [userProfile]);
 
@@ -136,29 +131,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
     }
   };
 
-  // Handle email update
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEmail || !emailPassword) return;
-
-    setEmailLoading(true);
-    try {
-      await updateUserEmail(newEmail, emailPassword);
-      setToast({ type: 'success', message: 'E-posta başarıyla güncellendi' });
-      setEmailPassword('');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'E-posta güncellenemedi';
-      if (message.includes('auth/wrong-password') || message.includes('auth/invalid-credential')) {
-        setToast({ type: 'error', message: 'Mevcut şifre yanlış' });
-      } else if (message.includes('auth/requires-recent-login')) {
-        setToast({ type: 'error', message: 'Güvenlik nedeniyle yeniden giriş yapmanız gerekiyor' });
-      } else {
-        setToast({ type: 'error', message });
-      }
-    } finally {
-      setEmailLoading(false);
-    }
-  };
+  // Email update removed - username-only system
 
   // Handle password update
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -203,7 +176,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
 
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
     { key: 'profile', label: 'Profil', icon: <User className="w-4 h-4" /> },
-    { key: 'email', label: 'E-posta', icon: <Mail className="w-4 h-4" /> },
     { key: 'password', label: 'Şifre', icon: <Lock className="w-4 h-4" /> }
   ];
 
@@ -349,73 +321,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
                   <Save className="w-5 h-5" />
                 )}
                 Kaydet
-              </button>
-            </form>
-          )}
-
-          {/* Email Tab */}
-          {activeTab === 'email' && (
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-gray-100'}`}>
-                <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                  Mevcut e-posta: <span className="font-medium">{userProfile?.email}</span>
-                </p>
-              </div>
-
-              {/* New Email */}
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                  Yeni E-posta
-                </label>
-                <div className="relative">
-                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    className={`w-full rounded-xl pl-12 pr-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                    }`}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Current Password for verification */}
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                  Mevcut Şifre (Doğrulama)
-                </label>
-                <div className="relative">
-                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type="password"
-                    value={emailPassword}
-                    onChange={(e) => setEmailPassword(e.target.value)}
-                    placeholder="Mevcut şifrenizi girin"
-                    className={`w-full rounded-xl pl-12 pr-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                    }`}
-                    required
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={emailLoading || newEmail === userProfile?.email}
-                className="w-full flex items-center justify-center gap-2 bg-safety-orange hover:bg-safety-orange-dark text-white font-semibold py-3 px-4 rounded-xl transition-colors disabled:opacity-50"
-              >
-                {emailLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Save className="w-5 h-5" />
-                )}
-                E-postayı Güncelle
               </button>
             </form>
           )}

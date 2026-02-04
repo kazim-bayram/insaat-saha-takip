@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "api/**/*.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
+  "env": {
+    "FIREBASE_SERVICE_ACCOUNT_KEY": "@firebase_service_account_key",
+    "ALLOWED_ORIGIN": "https://your-domain.vercel.app"
+  }
+}

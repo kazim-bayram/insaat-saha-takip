@@ -31,7 +31,6 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
   const { isDark } = useTheme();
   const { checkUsernameAvailable } = useAuth();
 
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -44,7 +43,6 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
   if (!isOpen) return null;
 
   const resetForm = () => {
-    setEmail('');
     setPassword('');
     setUsername('');
     setDisplayName('');
@@ -66,7 +64,7 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
 
     try {
       // Validate inputs
-      if (!email || !password || !username || !displayName) {
+      if (!password || !username || !displayName) {
         throw new Error('Lütfen tüm alanları doldurun');
       }
 
@@ -79,6 +77,9 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
       if (!isUsernameAvailable) {
         throw new Error('Bu kullanıcı adı zaten kullanılıyor');
       }
+
+      // Generate email from username with @insaat.local domain
+      const email = `${username.toLowerCase()}@insaat.local`;
 
       // Create a secondary Firebase app instance
       const secondaryAppName = 'SecondaryApp';
@@ -108,6 +109,7 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
         username: username.toLowerCase(),
         displayName: displayName,
         role: role,
+        isActive: true, // Default to active
         createdAt: serverTimestamp()
       });
 
@@ -128,9 +130,7 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
       
       // Handle specific Firebase errors
       if (err.code === 'auth/email-already-in-use') {
-        setError('Bu e-posta adresi zaten kullanılıyor');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Geçersiz e-posta adresi');
+        setError('Bu kullanıcı adı zaten kullanılıyor');
       } else if (err.code === 'auth/weak-password') {
         setError('Şifre çok zayıf. En az 6 karakter kullanın');
       } else {
@@ -245,27 +245,11 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
             </p>
           </div>
 
-          {/* Email */}
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-              E-posta *
-            </label>
-            <div className="relative">
-              <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="ornek@sirket.com"
-                className={`w-full rounded-xl pl-12 pr-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                  isDark 
-                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                    : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                }`}
-                required
-                disabled={loading || success}
-              />
-            </div>
+          {/* Info about automatic email generation */}
+          <div className={`p-3 rounded-xl border ${isDark ? 'bg-blue-600/10 border-blue-500/30' : 'bg-blue-50 border-blue-200'}`}>
+            <p className={`text-xs ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+              <strong>Not:</strong> Kullanıcı adından otomatik olarak <code className="px-1 py-0.5 rounded bg-black/20">@insaat.local</code> uzantılı e-posta oluşturulacaktır.
+            </p>
           </div>
 
           {/* Password */}
