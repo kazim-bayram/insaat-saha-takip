@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
-import { HardHat, Mail, Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon, AtSign, CheckCircle2, XCircle } from 'lucide-react';
+import { HardHat, Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon, AtSign, CheckCircle2, XCircle } from 'lucide-react';
+import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { auth } from '../firebase/config';
 
 const Login: React.FC = () => {
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
@@ -48,8 +53,9 @@ const Login: React.FC = () => {
 
     try {
       if (isRegister) {
+        // Registration validation
         if (!displayName.trim()) {
-          throw new Error('Lütfen adınızı girin');
+          throw new Error('Lütfen adınızı ve soyadınızı girin');
         }
         if (!username.trim() || username.length < 3) {
           throw new Error('Kullanıcı adı en az 3 karakter olmalıdır');
@@ -58,7 +64,13 @@ const Login: React.FC = () => {
           throw new Error('Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir');
         }
         if (usernameStatus === 'taken') {
-          throw new Error('Bu kullanıcı adı zaten kullanılıyor');
+          throw new Error('Bu kullanıcı adı zaten alınmış');
+        }
+        if (password.length < 6) {
+          throw new Error('Şifre en az 6 karakter olmalıdır');
+        }
+        if (password !== confirmPassword) {
+          throw new Error('Şifreler eşleşmiyor');
         }
         
         try {
@@ -75,20 +87,43 @@ const Login: React.FC = () => {
           throw registerErr;
         }
       } else {
-        // Username-only login
-        await login(username, password);
+        // Login with Remember Me persistence
+        try {
+          // Set persistence based on "Remember Me" checkbox
+          if (rememberMe) {
+            await setPersistence(auth, browserLocalPersistence);
+          } else {
+            await setPersistence(auth, browserSessionPersistence);
+          }
+          
+          // Username-only login (appends @insaat.local)
+          await login(username, password);
+        } catch (loginErr: any) {
+          throw loginErr;
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Kimlik doğrulama başarısız';
-      // Firebase hatalarını kullanıcı dostu mesajlara çevir
-      if (message.includes('auth/invalid-credential')) {
-        setError('Geçersiz kullanıcı adı veya şifre. Lütfen tekrar deneyin.');
+      
+      // Map Firebase errors to user-friendly Turkish messages
+      if (message.includes('auth/invalid-credential') || message.includes('auth/wrong-password')) {
+        setError('Kullanıcı adı veya şifre hatalı');
+      } else if (message.includes('auth/user-not-found')) {
+        setError('Kullanıcı bulunamadı');
       } else if (message.includes('auth/email-already-in-use')) {
-        setError('Bu kullanıcı adı zaten kayıtlı. Lütfen giriş yapın.');
+        setError('Bu kullanıcı adı zaten alınmış');
       } else if (message.includes('auth/weak-password')) {
-        setError('Şifre en az 6 karakter olmalıdır.');
+        setError('Şifre en az 6 karakter olmalıdır');
+      } else if (message.includes('auth/invalid-email')) {
+        setError('Kullanıcı adı geçersiz');
+      } else if (message.includes('auth/too-many-requests')) {
+        setError('Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin');
       } else if (message.includes('Hesap erişime kapatılmıştır')) {
-        setError('Hesabınız erişime kapatılmıştır. Lütfen yönetici ile iletişime geçin.');
+        setError('Hesabınız erişime kapatılmıştır. Lütfen yönetici ile iletişime geçin');
+      } else if (message.includes('Şifreler eşleşmiyor')) {
+        setError('Şifreler eşleşmiyor');
+      } else if (message.includes('zaten alınmış')) {
+        setError(message);
       } else {
         setError(message);
       }
@@ -308,7 +343,74 @@ const Login: React.FC = () => {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              {isRegister && (
+                <p className={`text-xs mt-1 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                  En az 6 karakter
+                </p>
+              )}
             </div>
+
+            {/* Şifre Tekrar Alanı (Sadece Kayıt) */}
+            {isRegister && (
+              <div className="animate-slide-up">
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  Şifre Tekrar
+                </label>
+                <div className="relative">
+                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className={`w-full rounded-xl pl-12 pr-12 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                      isDark 
+                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                    } ${password && confirmPassword && password !== confirmPassword ? 'border-red-500' : ''}`}
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${
+                      isDark ? 'text-concrete-500 hover:text-concrete-300' : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {password && confirmPassword && password !== confirmPassword && (
+                  <p className="text-red-400 text-xs mt-1">Şifreler eşleşmiyor</p>
+                )}
+              </div>
+            )}
+
+            {/* Beni Hatırla (Sadece Giriş) */}
+            {!isRegister && (
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className={`w-4 h-4 rounded border transition-colors cursor-pointer ${
+                    isDark
+                      ? 'bg-slate-900/50 border-slate-600 text-safety-orange focus:ring-safety-orange/20 focus:ring-offset-slate-850'
+                      : 'bg-white border-gray-300 text-safety-orange focus:ring-safety-orange/20 focus:ring-offset-white'
+                  }`}
+                />
+                <label
+                  htmlFor="rememberMe"
+                  className={`ml-2 text-sm cursor-pointer select-none ${
+                    isDark ? 'text-concrete-300' : 'text-gray-700'
+                  }`}
+                >
+                  Beni Hatırla
+                </label>
+              </div>
+            )}
 
             {/* Gönder Butonu */}
             <button
@@ -338,8 +440,10 @@ const Login: React.FC = () => {
                   // Reset fields when switching
                   setUsername('');
                   setPassword('');
+                  setConfirmPassword('');
                   setDisplayName('');
                   setUsernameStatus('idle');
+                  setRememberMe(false);
                 }}
                 className="ml-2 text-safety-orange hover:text-safety-orange-light font-medium transition-colors"
               >
