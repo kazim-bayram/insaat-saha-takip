@@ -13,14 +13,14 @@ import {
   Moon,
   Download,
   CheckCircle2,
-  XCircle,
   Users,
   BarChart3,
   Search,
   MapPin,
-  RotateCcw,
   SlidersHorizontal,
-  Tag
+  Tag,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -53,8 +53,7 @@ const Dashboard: React.FC = () => {
     canDeleteNote,
     filterNotes,
     getProjectNames,
-    getWorkerNames,
-    getKPIStats
+    getWorkerNames
   } = useNotes();
 
   // Modal durumları
@@ -68,6 +67,7 @@ const Dashboard: React.FC = () => {
   // Görünüm durumu
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
 
   // Filtre durumu
   const [filters, setFilters] = useState<FilterOptions>({
@@ -91,8 +91,25 @@ const Dashboard: React.FC = () => {
   const projectNames = useMemo(() => getProjectNames(), [getProjectNames]);
   const workerNames = useMemo(() => getWorkerNames(), [getWorkerNames]);
 
-  // KPI statistics
-  const kpiStats = useMemo(() => getKPIStats(), [getKPIStats]);
+  // Enhanced analytics for collapsible panel
+  const analyticsStats = useMemo(() => {
+    const total = notes.length;
+    const onay = notes.filter(n => normalizeStatus(n.status) === 'Onay').length;
+    const eksik = notes.filter(n => normalizeStatus(n.status) === 'Eksik').length;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todaysNotes = notes.filter(n => {
+      const d = n.createdAt?.toDate?.() || new Date(0);
+      const noteDate = new Date(d);
+      noteDate.setHours(0, 0, 0, 0);
+      return noteDate.getTime() === today.getTime();
+    }).length;
+    const activeProjects = new Set(notes.map(n => n.projectName).filter(Boolean)).size;
+    const activeWorkers = new Set(notes.map(n => n.userId).filter(Boolean)).size;
+    const completionRate = total > 0 ? Math.round((onay / total) * 100) : 0;
+
+    return { total, onay, eksik, todaysNotes, activeProjects, activeWorkers, completionRate };
+  }, [notes]);
 
   // Export to CSV function
   const exportToCSV = useCallback(() => {
@@ -272,6 +289,21 @@ const Dashboard: React.FC = () => {
 
             {/* Kullanıcı Bilgisi & Aksiyonlar */}
             <div className="flex items-center gap-2">
+              {/* Analytics Toggle Button */}
+              <button
+                onClick={() => setIsStatsOpen(!isStatsOpen)}
+                className={`p-2 rounded-lg transition-colors ${
+                  isStatsOpen
+                    ? 'bg-safety-orange/20 text-safety-orange'
+                    : isDark 
+                      ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
+                      : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                title="Saha Analizi"
+              >
+                <BarChart3 className="w-5 h-5" />
+              </button>
+
               {/* Search/Filter Toggle Button */}
               <button
                 onClick={() => setIsFiltersOpen(!isFiltersOpen)}
@@ -498,26 +530,27 @@ const Dashboard: React.FC = () => {
                     />
                   </div>
                 </div>
+              </div>
 
-                {/* Reset Button */}
-                <div className="flex items-end">
-                  <button
-                    onClick={() => {
-                      clearFilters();
-                    }}
-                    disabled={!hasActiveFilters}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      hasActiveFilters
-                        ? 'bg-safety-orange text-white hover:bg-safety-orange-dark'
-                        : isDark 
-                          ? 'bg-slate-800 text-concrete-400 border border-slate-600' 
-                          : 'bg-white text-gray-500 border border-gray-300'
-                    }`}
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    Sıfırla
-                  </button>
-                </div>
+              {/* Filtreleri Temizle - Text button aligned right */}
+              <div className="flex justify-end mt-3">
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  disabled={!hasActiveFilters}
+                  className={`flex items-center gap-1.5 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    hasActiveFilters
+                      ? isDark
+                        ? 'text-concrete-500 hover:text-red-400'
+                        : 'text-gray-500 hover:text-red-600'
+                      : isDark
+                        ? 'text-concrete-600'
+                        : 'text-gray-400'
+                  }`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Filtreleri Temizle
+                </button>
               </div>
 
               {/* Active Filters Summary */}
@@ -593,99 +626,126 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
-      </header>
 
-      {/* Ana İçerik */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* KPI Özet Kartları (Sadece Yönetici) */}
-        {isAdmin && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {/* Toplam Not */}
-            <div className={`rounded-xl p-4 border ${
-              isDark 
-                ? 'bg-slate-850 border-slate-700/50' 
-                : 'bg-white border-gray-200 shadow-sm'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
-                  <BarChart3 className={`w-5 h-5 ${isDark ? 'text-concrete-300' : 'text-gray-600'}`} />
+        {/* Collapsible Analytics Panel */}
+        <div 
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${
+            isStatsOpen ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
+        >
+          <div className={`border-t ${isDark ? 'border-slate-700/50 bg-slate-900/50' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                <BarChart3 className="w-4 h-4" />
+                Saha Analizi
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {/* Genel Durum (Completion Rate) */}
+                <div className={`rounded-xl p-4 border col-span-2 md:col-span-1 ${
+                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-green-600/20' : 'bg-green-100'}`}>
+                      <CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                    </div>
+                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                      Genel Durum
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1">
+                    <span className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                      %{analyticsStats.completionRate}
+                    </span>
+                  </div>
+                  <div className={`mt-2 h-2 rounded-full overflow-hidden ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
+                    <div 
+                      className="h-full bg-green-500 rounded-full transition-all duration-500" 
+                      style={{ width: `${analyticsStats.completionRate}%` }}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                    Toplam Not
-                  </p>
-                  <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {kpiStats.totalNotes}
-                  </p>
-                </div>
-              </div>
-            </div>
 
-            {/* Eksik (Missing) */}
-            <div className={`rounded-xl p-4 border ${
-              isDark 
-                ? 'bg-slate-850 border-slate-700/50' 
-                : 'bg-white border-gray-200 shadow-sm'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-red-600/20' : 'bg-red-100'}`}>
-                  <XCircle className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
-                </div>
-                <div>
-                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                    Eksik
-                  </p>
+                {/* Kritik İşler (Pending - Eksik) */}
+                <div className={`rounded-xl p-4 border ${
+                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-red-600/20' : 'bg-red-100'}`}>
+                      <AlertTriangle className={`w-4 h-4 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                    </div>
+                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                      Kritik İşler
+                    </span>
+                  </div>
                   <p className={`text-2xl font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                    {kpiStats.eksikCount}
+                    {analyticsStats.eksik}
                   </p>
+                  <span className={`text-[10px] ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                    Bekleyen Eksik
+                  </span>
                 </div>
-              </div>
-            </div>
 
-            {/* Onay (Approved) */}
-            <div className={`rounded-xl p-4 border ${
-              isDark 
-                ? 'bg-slate-850 border-slate-700/50' 
-                : 'bg-white border-gray-200 shadow-sm'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-green-600/20' : 'bg-green-100'}`}>
-                  <CheckCircle2 className={`w-5 h-5 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-                </div>
-                <div>
-                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                    Onay
-                  </p>
-                  <p className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                    {kpiStats.onayCount}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Aktif Çalışanlar */}
-            <div className={`rounded-xl p-4 border ${
-              isDark 
-                ? 'bg-slate-850 border-slate-700/50' 
-                : 'bg-white border-gray-200 shadow-sm'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-blue-600/20' : 'bg-blue-100'}`}>
-                  <Users className={`w-5 h-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-                </div>
-                <div>
-                  <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                    Aktif Çalışan
-                  </p>
+                {/* Bugünün Raporları */}
+                <div className={`rounded-xl p-4 border ${
+                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600/20' : 'bg-blue-100'}`}>
+                      <Calendar className={`w-4 h-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                    </div>
+                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                      Bugünün Raporları
+                    </span>
+                  </div>
                   <p className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {kpiStats.activeWorkers}
+                    {analyticsStats.todaysNotes}
                   </p>
+                </div>
+
+                {/* Aktif Projeler */}
+                <div className={`rounded-xl p-4 border ${
+                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
+                      <FolderOpen className={`w-4 h-4 ${isDark ? 'text-concrete-300' : 'text-gray-600'}`} />
+                    </div>
+                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                      Aktif Projeler
+                    </span>
+                  </div>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {analyticsStats.activeProjects}
+                  </p>
+                </div>
+
+                {/* Saha Yoğunluğu (Active Workers) */}
+                <div className={`rounded-xl p-4 border ${
+                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600/20' : 'bg-blue-100'}`}>
+                      <Users className={`w-4 h-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                    </div>
+                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                      Saha Yoğunluğu
+                    </span>
+                  </div>
+                  <p className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                    {analyticsStats.activeWorkers}
+                  </p>
+                  <span className={`text-[10px] ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+                    Aktif çalışan
+                  </span>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      </header>
 
+      {/* Ana İçerik */}
+      <main className="max-w-7xl mx-auto px-4 py-6">
         {/* Araç Çubuğu */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           {/* İstatistikler */}
