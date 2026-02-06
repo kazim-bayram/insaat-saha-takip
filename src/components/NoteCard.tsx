@@ -15,7 +15,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, normalizeStatus } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, normalizeStatus, getWorkDate, formatWorkDate } from '../types';
 
 interface NoteCardProps {
   note: Note;
@@ -48,16 +48,8 @@ const NoteCard: React.FC<NoteCardProps> = ({
   const [showComments, setShowComments] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  const formattedDate = note.createdAt.toDate().toLocaleDateString('tr-TR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  });
-
-  const formattedTime = note.createdAt.toDate().toLocaleTimeString('tr-TR', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const workDate = getWorkDate(note);
+  const formattedDate = formatWorkDate(workDate);
 
   // Current status config (normalize legacy statuses)
   const currentStatus = normalizeStatus(note.status);
@@ -329,11 +321,20 @@ const NoteCard: React.FC<NoteCardProps> = ({
       {/* İçerik Bölümü */}
       <div className="p-4">
         {/* Proje Adı (Ana Başlık) */}
-        <h3 className={`font-bold text-lg mb-2 line-clamp-1 group-hover:text-safety-orange transition-colors ${
-          isDark ? 'text-white' : 'text-gray-900'
-        }`}>
-          {note.projectName || note.title || 'Proje Belirtilmemiş'}
-        </h3>
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <h3 className={`font-bold text-lg line-clamp-1 group-hover:text-safety-orange transition-colors ${
+            isDark ? 'text-white' : 'text-gray-900'
+          }`}>
+            {note.projectName || note.title || 'Proje Belirtilmemiş'}
+          </h3>
+          {note.category && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+              isDark ? 'bg-slate-700 text-concrete-300' : 'bg-gray-200 text-gray-700'
+            }`}>
+              {note.category}
+            </span>
+          )}
+        </div>
 
         {/* Ada/Parsel Bilgileri */}
         {(note.ada || note.parsel) && (
@@ -401,12 +402,10 @@ const NoteCard: React.FC<NoteCardProps> = ({
 
         {/* Meta Bilgiler */}
         <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-xs ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
-          {/* Tarih */}
+          {/* Yapılan Tarih */}
           <div className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" />
             <span>{formattedDate}</span>
-            <span className={isDark ? 'text-concrete-600' : 'text-gray-400'}>•</span>
-            <span>{formattedTime}</span>
           </div>
 
           {/* Çalışan Bilgisi (Yönetici Görünümü) */}

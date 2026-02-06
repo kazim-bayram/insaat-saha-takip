@@ -25,7 +25,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment, normalizeStatus } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment, normalizeStatus, getWorkDate, formatWorkDate } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 interface NoteDetailModalProps {
@@ -77,17 +77,8 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
     }
   };
 
-  const formattedDate = note.createdAt.toDate().toLocaleDateString('tr-TR', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-
-  const formattedTime = note.createdAt.toDate().toLocaleTimeString('tr-TR', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const workDate = getWorkDate(note);
+  const formattedDate = formatWorkDate(workDate);
 
   const handleDownloadImage = (url: string) => {
     window.open(url, '_blank');
@@ -182,9 +173,16 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
           isDark ? 'border-slate-700/50' : 'border-gray-200'
         }`}>
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <h2 className={`text-xl font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {note.projectName || note.title || 'Proje Belirtilmemiş'}
-            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className={`text-xl font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {note.projectName || note.title || 'Proje Belirtilmemiş'}
+              </h2>
+              {note.category && (
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${isDark ? 'bg-slate-700 text-concrete-300' : 'bg-gray-200 text-gray-700'}`}>
+                  {note.category}
+                </span>
+              )}
+            </div>
             {/* Status Badge */}
             <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
               isDark 
@@ -418,15 +416,14 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Tarih */}
+              {/* Yapılan Tarih */}
               <div className="flex items-start gap-3">
                 <div className={`p-2 rounded-lg ${isDark ? 'bg-steel-600/10' : 'bg-blue-50'}`}>
                   <Calendar className={`w-5 h-5 ${isDark ? 'text-steel-400' : 'text-blue-600'}`} />
                 </div>
                 <div>
-                  <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Tarih ve Saat</p>
+                  <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Yapılan Tarih</p>
                   <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{formattedDate}</p>
-                  <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>{formattedTime}</p>
                 </div>
               </div>
 

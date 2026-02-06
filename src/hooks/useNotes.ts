@@ -19,7 +19,7 @@ import {
   deleteObject
 } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
-import { Note, NoteFormData, FilterOptions, NoteStatus, UploadProgress, Comment, normalizeStatus } from '../types';
+import { Note, NoteFormData, FilterOptions, NoteStatus, UploadProgress, Comment, normalizeStatus, getWorkDate } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 // Generate unique ID for comments
@@ -153,6 +153,8 @@ export const useNotes = () => {
         imageUrls,  // New array field
         content: formData.content || '',
         projectName: formData.projectName || '',
+        category: formData.category || '',
+        date: formData.date || new Date().toISOString().split('T')[0],  // Work date YYYY-MM-DD
         ada: formData.ada || '',
         parsel: formData.parsel || '',
         progressLevel: formData.progressLevel || '',
@@ -199,6 +201,8 @@ export const useNotes = () => {
       // Only add fields that are defined
       if (formData.content !== undefined) sanitizedData.content = formData.content || '';
       if (formData.projectName !== undefined) sanitizedData.projectName = formData.projectName || '';
+      if (formData.category !== undefined) sanitizedData.category = formData.category || '';
+      if (formData.date !== undefined) sanitizedData.date = formData.date || '';
       if (formData.ada !== undefined) sanitizedData.ada = formData.ada || '';
       if (formData.parsel !== undefined) sanitizedData.parsel = formData.parsel || '';
       if (formData.progressLevel !== undefined) sanitizedData.progressLevel = formData.progressLevel || '';
@@ -314,23 +318,13 @@ export const useNotes = () => {
         }
       }
 
-      // Filter by date range
-      if (filters.dateFrom) {
-        const noteDate = note.createdAt.toDate();
-        const fromDate = new Date(filters.dateFrom);
-        fromDate.setHours(0, 0, 0, 0);
-        if (noteDate < fromDate) {
-          return false;
-        }
+      // Filter by date range (use work date, fallback to createdAt for legacy)
+      const workDateStr = getWorkDate(note);
+      if (filters.dateFrom && workDateStr) {
+        if (workDateStr < filters.dateFrom) return false;
       }
-
-      if (filters.dateTo) {
-        const noteDate = note.createdAt.toDate();
-        const toDate = new Date(filters.dateTo);
-        toDate.setHours(23, 59, 59, 999);
-        if (noteDate > toDate) {
-          return false;
-        }
+      if (filters.dateTo && workDateStr) {
+        if (workDateStr > filters.dateTo) return false;
       }
 
       return true;

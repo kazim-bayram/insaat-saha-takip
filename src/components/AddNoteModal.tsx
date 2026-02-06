@@ -13,7 +13,7 @@ import {
   Layers
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { NoteFormData, Note, NoteStatus, CustomField, UploadProgress, getNoteImages, normalizeStatus } from '../types';
+import { NoteFormData, Note, NoteStatus, CustomField, UploadProgress, getNoteImages, normalizeStatus, CATEGORY_OPTIONS } from '../types';
 
 interface ImagePreview {
   file: File;
@@ -38,6 +38,8 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const { isDark } = useTheme();
   const [content, setContent] = useState('');
   const [projectName, setProjectName] = useState('');
+  const [category, setCategory] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [ada, setAda] = useState('');
   const [parsel, setParsel] = useState('');
   const [progressLevel, setProgressLevel] = useState('');
@@ -57,6 +59,8 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     if (editNote) {
       setContent(editNote.content);
       setProjectName(editNote.projectName);
+      setCategory(editNote.category || '');
+      setDate(editNote.date || (editNote.createdAt?.toDate ? new Date(editNote.createdAt.toDate()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]));
       setAda(editNote.ada || '');
       setParsel(editNote.parsel || '');
       setProgressLevel(editNote.progressLevel || '');
@@ -73,6 +77,8 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const resetForm = () => {
     setContent('');
     setProjectName('');
+    setCategory('');
+    setDate(new Date().toISOString().split('T')[0]);
     setAda('');
     setParsel('');
     setProgressLevel('');
@@ -173,6 +179,14 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       setError('Lütfen bir proje adı girin');
       return;
     }
+    if (!category.trim()) {
+      setError('Lütfen bir kategori seçin');
+      return;
+    }
+    if (!date) {
+      setError('Lütfen yapılan tarihi seçin');
+      return;
+    }
 
     setSubmitting(true);
 
@@ -188,6 +202,8 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       await onSubmit({
         content: content.trim(),
         projectName: projectName.trim(),
+        category: category.trim(),
+        date: date.trim(),
         ada: ada.trim(),
         parsel: parsel.trim(),
         progressLevel: progressLevel.trim(),
@@ -465,6 +481,46 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                 }`}
                 required
               />
+            </div>
+
+            {/* Kategori & Yapılan Tarih */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  Kategori *
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white focus:border-safety-orange' 
+                      : 'bg-gray-50 border border-gray-300 text-gray-900 focus:border-safety-orange'
+                  }`}
+                  required
+                >
+                  <option value="">Seçiniz...</option>
+                  {CATEGORY_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                  Yapılan Tarih *
+                </label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                    isDark 
+                      ? 'bg-slate-900/50 border border-slate-600 text-white focus:border-safety-orange' 
+                      : 'bg-gray-50 border border-gray-300 text-gray-900 focus:border-safety-orange'
+                  }`}
+                  required
+                />
+              </div>
             </div>
 
             {/* Ada/Parsel Bilgileri */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -7,6 +7,15 @@ import TablePage from './pages/TablePage';
 import LoadingSpinner from './components/LoadingSpinner';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import { CheckCircle2 } from 'lucide-react';
+
+// Protect /table-view: redirect workers to home
+const AdminTableRoute: React.FC = () => {
+  const { userProfile } = useAuth();
+  if (userProfile?.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+  return <TablePage />;
+};
 
 const App: React.FC = () => {
   const { currentUser, userProfile, loading } = useAuth();
@@ -47,7 +56,7 @@ const App: React.FC = () => {
     <>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/table-view" element={<TablePage />} />
+        <Route path="/table-view" element={<AdminTableRoute />} />
       </Routes>
       {/* Toast: Şifre değiştirildi */}
       {showPasswordChangeToast && (

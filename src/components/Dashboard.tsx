@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -12,7 +12,6 @@ import {
   ChevronDown,
   Sun,
   Moon,
-  Download,
   CheckCircle2,
   Users,
   BarChart3,
@@ -27,7 +26,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotes } from '../hooks/useNotes';
-import { Note, FilterOptions, NOTE_STATUS_CONFIG, NoteFormData, getNoteImages, normalizeStatus } from '../types';
+import { Note, FilterOptions, NoteFormData, normalizeStatus, getWorkDate } from '../types';
 import NoteCard from './NoteCard';
 import NoteDetailModal from './NoteDetailModal';
 import AddNoteModal from './AddNoteModal';
@@ -37,7 +36,7 @@ import UserProfileMenu from './UserProfileMenu';
 import LoadingSpinner, { NotesGridSkeleton } from './LoadingSpinner';
 
 const Dashboard: React.FC = () => {
-  const { logout, isAdmin } = useAuth();
+  const { logout, isAdmin, currentUser } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const {
     notes,
@@ -89,6 +88,12 @@ const Dashboard: React.FC = () => {
     return filterNotes(filters);
   }, [notes, filters, filterNotes]);
 
+  // Role-based visibility: Workers see ONLY their own notes; Admins see ALL
+  const visibleNotes = useMemo(() => {
+    if (isAdmin) return filteredNotes;
+    return filteredNotes.filter(note => note.userId === currentUser?.uid);
+  }, [filteredNotes, isAdmin, currentUser?.uid]);
+
   // Filtre dropdown'ları için benzersiz değerler
   const projectNames = useMemo(() => getProjectNames(), [getProjectNames]);
   const workerNames = useMemo(() => getWorkerNames(), [getWorkerNames]);
@@ -100,87 +105,14 @@ const Dashboard: React.FC = () => {
     const eksik = notes.filter(n => normalizeStatus(n.status) === 'Eksik').length;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todaysNotes = notes.filter(n => {
-      const d = n.createdAt?.toDate?.() || new Date(0);
-      const noteDate = new Date(d);
-      noteDate.setHours(0, 0, 0, 0);
-      return noteDate.getTime() === today.getTime();
-    }).length;
+    const todayStr = today.toISOString().split('T')[0];
+    const todaysNotes = notes.filter(n => getWorkDate(n) === todayStr).length;
     const activeProjects = new Set(notes.map(n => n.projectName).filter(Boolean)).size;
     const activeWorkers = new Set(notes.map(n => n.userId).filter(Boolean)).size;
     const completionRate = total > 0 ? Math.round((onay / total) * 100) : 0;
 
     return { total, onay, eksik, todaysNotes, activeProjects, activeWorkers, completionRate };
   }, [notes]);
-
-  // Export to CSV function
-  const exportToCSV = useCallback(() => {
-    // UTF-8 BOM for Turkish character support
-    const BOM = '\uFEFF';
-    
-    // CSV Headers
-    const headers = [
-      'Tarih',
-      'Proje Adı',
-      'Ada',
-      'Parsel',
-      'Çalışan Email',
-      'Açıklama',
-      'Durum',
-      'Resim URLleri'
-    ];
-
-    // Map status to Turkish labels
-    const getStatusLabel = (status: string) => {
-      const normalized = normalizeStatus(status);
-      return NOTE_STATUS_CONFIG[normalized]?.label || 'Eksik';
-    };
-
-    // Convert notes to CSV rows
-    const rows = filteredNotes.map(note => {
-      const date = note.createdAt.toDate().toLocaleDateString('tr-TR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
-      
-      // Escape special characters and wrap in quotes
-      const escapeCSV = (value: string) => {
-        if (!value) return '';
-        const escaped = value.replace(/"/g, '""');
-        return `"${escaped}"`;
-      };
-
-      // Get all image URLs with backward compatibility
-      const imageUrls = getNoteImages(note).join(' | ');
-
-      return [
-        escapeCSV(date),
-        escapeCSV(note.projectName || ''),
-        escapeCSV(note.ada || ''),
-        escapeCSV(note.parsel || ''),
-        escapeCSV(note.userEmail || ''),
-        escapeCSV(note.content || ''),
-        escapeCSV(getStatusLabel(note.status)),
-        escapeCSV(imageUrls)
-      ].join(',');
-    });
-
-    // Combine headers and rows
-    const csvContent = BOM + headers.join(',') + '\n' + rows.join('\n');
-    
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `saha-notlari-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [filteredNotes]);
 
   const handleNoteClick = (note: Note) => {
     setSelectedNote(note);
@@ -291,21 +223,24 @@ const Dashboard: React.FC = () => {
 
             {/* Kullanıcı Bilgisi & Aksiyonlar */}
             <div className="flex items-center gap-2">
-              {/* Tablo Görünümü Link */}
-              <Link
-                to="/table-view"
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isDark
-                    ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-                title="Tablo Görünümü"
-              >
-                <FileSpreadsheet className="w-5 h-5" />
-                <span className="hidden sm:inline">Tablo Görünümü</span>
-              </Link>
+              {/* Tablo Görünümü Link - Admin only */}
+              {isAdmin && (
+                <Link
+                  to="/table-view"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isDark
+                      ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                  title="Tablo Görünümü"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span className="hidden sm:inline">Tablo Görünümü</span>
+                </Link>
+              )}
 
-              {/* Analytics Toggle Button */}
+              {/* Analytics Toggle Button - Admin only */}
+              {isAdmin && (
               <button
                 onClick={() => setIsStatsOpen(!isStatsOpen)}
                 className={`p-2 rounded-lg transition-colors ${
@@ -319,6 +254,7 @@ const Dashboard: React.FC = () => {
               >
                 <BarChart3 className="w-5 h-5" />
               </button>
+              )}
 
               {/* Search/Filter Toggle Button */}
               <button
@@ -768,9 +704,9 @@ const Dashboard: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className={`flex items-center gap-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
               <FileText className="w-5 h-5" />
-              <span className="text-lg font-semibold">{filteredNotes.length}</span>
+              <span className="text-lg font-semibold">{visibleNotes.length}</span>
               <span className={isDark ? 'text-concrete-500' : 'text-gray-500'}>
-                {filteredNotes.length === 1 ? 'Not' : 'Not'}
+                {visibleNotes.length === 1 ? 'Not' : 'Not'}
               </span>
               {hasActiveFilters && (
                 <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-safety-orange/20 text-safety-orange' : 'bg-orange-100 text-orange-700'}`}>
@@ -809,21 +745,6 @@ const Dashboard: React.FC = () => {
             </div>
 
 
-            {/* Export Butonu (Sadece Yönetici) */}
-            {isAdmin && (
-              <button
-                onClick={exportToCSV}
-                disabled={filteredNotes.length === 0}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isDark 
-                    ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' 
-                    : 'bg-green-100 text-green-700 hover:bg-green-200'
-                }`}
-              >
-                <Download className="w-4 h-4" />
-                <span className="text-sm font-medium">Dışa Aktar</span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -840,7 +761,7 @@ const Dashboard: React.FC = () => {
             </h3>
             <p className={isDark ? 'text-concrete-400' : 'text-gray-500'}>{error}</p>
           </div>
-        ) : filteredNotes.length === 0 ? (
+        ) : visibleNotes.length === 0 ? (
           <div className="text-center py-12">
             <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
               isDark ? 'bg-slate-800' : 'bg-gray-200'
@@ -867,7 +788,7 @@ const Dashboard: React.FC = () => {
           </div>
         ) : (
           <div className={viewMode === 'grid' ? 'masonry-grid' : 'space-y-4'}>
-            {filteredNotes.map((note) => (
+            {visibleNotes.map((note) => (
               <NoteCard
                 key={note.id}
                 note={note}

@@ -14,14 +14,14 @@ import { Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotes } from '../hooks/useNotes';
-import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG } from '../types';
+import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate } from '../types';
 import AddNoteModal from '../components/AddNoteModal';
 import UserProfileMenu from '../components/UserProfileMenu';
 import ProfileSettings from '../components/ProfileSettings';
 import UserManagement from '../components/UserManagement';
 import LoadingSpinner from '../components/LoadingSpinner';
 
-type SortField = 'projectName' | 'createdAt' | null;
+type SortField = 'projectName' | 'date' | 'category' | null;
 type SortDir = 'asc' | 'desc';
 
 const TablePage: React.FC = () => {
@@ -39,14 +39,35 @@ const TablePage: React.FC = () => {
 
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [filters, setFilters] = useState({
+    project: '',
+    adaParsel: '',
+    category: '',
+    progress: '',
+    status: ''
+  });
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
 
-  // Use all notes (no filter) for table view - can be changed to filtered if needed
+  // Apply column filters (AND logic, case-insensitive)
+  const filteredNotes = useMemo(() => {
+    return notes.filter(note => {
+      const projectMatch = !filters.project || (note.projectName || '').toLowerCase().includes(filters.project.toLowerCase());
+      const adaParselStr = `${note.ada || ''}/${note.parsel || ''}`.toLowerCase();
+      const adaParselMatch = !filters.adaParsel || adaParselStr.includes(filters.adaParsel.toLowerCase());
+      const categoryMatch = !filters.category || (note.category || '').toLowerCase().includes(filters.category.toLowerCase());
+      const progressMatch = !filters.progress || (note.progressLevel || '').toLowerCase().includes(filters.progress.toLowerCase());
+      const noteStatus = normalizeStatus(note.status);
+      const statusMatch = !filters.status || noteStatus === filters.status;
+      return projectMatch && adaParselMatch && categoryMatch && progressMatch && statusMatch;
+    });
+  }, [notes, filters]);
+
+  // Sort filtered notes
   const displayNotes = useMemo(() => {
-    let list = [...notes];
+    let list = [...filteredNotes];
     if (sortField) {
       list.sort((a, b) => {
         let aVal: string | number = '';
@@ -54,22 +75,20 @@ const TablePage: React.FC = () => {
         if (sortField === 'projectName') {
           aVal = (a.projectName || '').toLowerCase();
           bVal = (b.projectName || '').toLowerCase();
-        } else if (sortField === 'createdAt') {
-          aVal = a.createdAt?.toDate?.()?.getTime() || 0;
-          bVal = b.createdAt?.toDate?.()?.getTime() || 0;
+        } else if (sortField === 'date') {
+          aVal = getWorkDate(a) || '';
+          bVal = getWorkDate(b) || '';
+        } else if (sortField === 'category') {
+          aVal = (a.category || '').toLowerCase();
+          bVal = (b.category || '').toLowerCase();
         }
         const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
         return sortDir === 'asc' ? cmp : -cmp;
       });
     }
     return list;
-  }, [notes, sortField, sortDir]);
+  }, [filteredNotes, sortField, sortDir]);
 
-  const formatDate = (timestamp: { toDate?: () => Date } | undefined) => {
-    if (!timestamp?.toDate) return '-';
-    const d = timestamp.toDate();
-    return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
-  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -84,24 +103,27 @@ const TablePage: React.FC = () => {
     const BOM = '\uFEFF';
     const getStatusLabel = (s: string) => NOTE_STATUS_CONFIG[normalizeStatus(s)]?.label || 'Eksik';
     const escape = (v: string) => {
-      if (!v) return '';
-      return `"${String(v).replace(/"/g, '""')}"`;
+      if (v == null || v === '') return '';
+      const str = String(v).replace(/"/g, '""');
+      return `"${str}"`;
     };
-    const headers = ['#', 'Proje İsmi', 'Ada / Parsel', 'Kategori', 'Hakediş / Seviye', 'Oluşturulma Tarihi', 'Durum'];
-    const rows = displayNotes.map((note, i) => [
-      String(i + 1),
-      note.projectName || '',
-      `${note.ada || '-'} / ${note.parsel || '-'}`,
-      '-',
-      note.progressLevel || '-',
-      formatDate(note.createdAt),
-      getStatusLabel(note.status)
-    ].map(v => escape(String(v))).join(','));
-    const csv = BOM + headers.join(',') + '\n' + rows.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const headers = ['Proje İsmi', 'Ada/Parsel', 'Kategori', 'Hakediş', 'Yapılan Tarih', 'Durum'];
+    const rows = displayNotes.map(note => {
+      const row = {
+        'Proje İsmi': note.projectName || '',
+        'Ada/Parsel': `${note.ada || '-'}/${note.parsel || '-'}`,
+        'Kategori': note.category || '',
+        'Hakediş': note.progressLevel || '',
+        'Yapılan Tarih': formatWorkDate(getWorkDate(note)),
+        'Durum': getStatusLabel(note.status)
+      };
+      return headers.map(h => escape(row[h as keyof typeof row])).join(',');
+    });
+    const csvContent = headers.join(',') + '\n' + rows.join('\n');
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `saha-tablo-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `saha-takip-rapor-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   }, [displayNotes]);
@@ -163,6 +185,7 @@ const TablePage: React.FC = () => {
                   </h1>
                   <p className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
                     {displayNotes.length} not
+                    {filters.project || filters.adaParsel || filters.category || filters.progress || filters.status ? ` (filtrelenmiş)` : ''}
                   </p>
                 </div>
               </div>
@@ -199,7 +222,7 @@ const TablePage: React.FC = () => {
       </header>
 
       {/* Table */}
-      <main className="max-w-full mx-auto px-4 py-4 overflow-x-auto">
+      <main className="max-w-full mx-auto px-4 py-4">
         {error && (
           <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
             {error}
@@ -209,73 +232,137 @@ const TablePage: React.FC = () => {
         <div className={`rounded-lg border overflow-hidden ${
           isDark ? 'border-slate-700/50' : 'border-gray-200'
         }`}>
-          <table className="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr className={`sticky top-0 z-10 ${isDark ? 'bg-gray-800 text-white' : 'bg-gray-800 text-white'}`}>
-                <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 w-12">#</th>
-                <th
-                  className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none"
-                  onClick={() => handleSort('projectName')}
-                >
-                  <span className="flex items-center gap-1">
-                    Proje İsmi
-                    {sortField === 'projectName' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                  </span>
-                </th>
-                <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 font-mono">Ada / Parsel</th>
-                <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50">Kategori</th>
-                <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50">Hakediş / Seviye</th>
-                <th
-                  className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none font-mono"
-                  onClick={() => handleSort('createdAt')}
-                >
-                  <span className="flex items-center gap-1">
-                    Oluşturulma Tarihi
-                    {sortField === 'createdAt' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                  </span>
-                </th>
-                <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50">Durum</th>
-                <th className="py-2 px-3 text-left font-semibold w-24">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayNotes.length === 0 ? (
+          <div className="overflow-x-auto w-full">
+            <table className="w-full min-w-[1000px] text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-gray-800 text-white">
+                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 w-12 whitespace-nowrap">#</th>
+                  <th
+                    className="sticky left-0 z-20 py-2 px-3 text-left font-semibold border-r border-gray-700/50 bg-gray-800 cursor-pointer hover:bg-gray-700/50 select-none whitespace-nowrap shadow-[4px_0_6px_-2px_rgba(0,0,0,0.3)]"
+                    onClick={() => handleSort('projectName')}
+                  >
+                    <span className="flex items-center gap-1">
+                      Proje İsmi
+                      {sortField === 'projectName' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                    </span>
+                  </th>
+                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 font-mono whitespace-nowrap">Ada / Parsel</th>
+                  <th
+                    className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none whitespace-nowrap"
+                    onClick={() => handleSort('category')}
+                  >
+                    <span className="flex items-center gap-1">
+                      Kategori
+                      {sortField === 'category' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                    </span>
+                  </th>
+                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap">Hakediş / Seviye</th>
+                  <th
+                    className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none font-mono whitespace-nowrap"
+                    onClick={() => handleSort('date')}
+                  >
+                    <span className="flex items-center gap-1">
+                      Tarih
+                      {sortField === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                    </span>
+                  </th>
+                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap">Durum</th>
+                  <th className="py-2 px-3 text-left font-semibold w-24 whitespace-nowrap">İşlemler</th>
+                </tr>
+                <tr className="bg-gray-700/80 text-white">
+                  <th className="py-1 px-2 border-r border-gray-600/50" />
+                  <th className="sticky left-0 z-20 py-1 px-2 border-r border-gray-600/50 bg-gray-700/80 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.3)]">
+                    <input
+                      type="text"
+                      value={filters.project}
+                      onChange={e => setFilters(f => ({ ...f, project: e.target.value }))}
+                      placeholder="Ara..."
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                    />
+                  </th>
+                  <th className="py-1 px-2 border-r border-gray-600/50">
+                    <input
+                      type="text"
+                      value={filters.adaParsel}
+                      onChange={e => setFilters(f => ({ ...f, adaParsel: e.target.value }))}
+                      placeholder="Ara..."
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange font-mono"
+                    />
+                  </th>
+                  <th className="py-1 px-2 border-r border-gray-600/50">
+                    <input
+                      type="text"
+                      value={filters.category}
+                      onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}
+                      placeholder="Ara..."
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                    />
+                  </th>
+                  <th className="py-1 px-2 border-r border-gray-600/50">
+                    <input
+                      type="text"
+                      value={filters.progress}
+                      onChange={e => setFilters(f => ({ ...f, progress: e.target.value }))}
+                      placeholder="Ara..."
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                    />
+                  </th>
+                  <th className="py-1 px-2 border-r border-gray-600/50" />
+                  <th className="py-1 px-2 border-r border-gray-600/50">
+                    <select
+                      value={filters.status}
+                      onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                    >
+                      <option value="">Tümü</option>
+                      <option value="Eksik">Eksik</option>
+                      <option value="Onay">Onay</option>
+                    </select>
+                  </th>
+                  <th className="py-1 px-2" />
+                </tr>
+              </thead>
+              <tbody>
+              {                displayNotes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className={`py-8 text-center ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
+                  <td colSpan={8} className={`py-8 text-center whitespace-normal ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
                     Henüz not bulunmuyor
                   </td>
                 </tr>
               ) : (
                 displayNotes.map((note, idx) => {
                   const status = normalizeStatus(note.status);
+                  const isOddRow = idx % 2 === 1;
+                  const rowBg = isOddRow ? (isDark ? 'bg-slate-900/30' : 'bg-gray-50') : (isDark ? 'bg-slate-850' : 'bg-white');
+                  const stickyBg = isOddRow ? (isDark ? 'bg-slate-900/30' : 'bg-gray-50') : (isDark ? 'bg-slate-850' : 'bg-white');
                   return (
                     <tr
                       key={note.id}
-                      className={`border-t transition-colors ${
+                      className={`border-t transition-colors ${rowBg} ${
                         isDark
                           ? 'border-slate-700/50 hover:bg-slate-800/50'
                           : 'border-gray-200 hover:bg-blue-50'
-                      } ${idx % 2 === 1 ? (isDark ? 'bg-slate-900/30' : 'bg-gray-50') : ''}`}
+                      }`}
                     >
-                      <td className={`py-2 px-3 font-mono ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>
+                      <td className={`py-2 px-3 font-mono whitespace-nowrap ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>
                         {idx + 1}
                       </td>
-                      <td className={`py-2 px-3 border-r ${isDark ? 'border-slate-700/50 text-white' : 'border-gray-200 text-gray-900'}`}>
+                      <td className={`sticky left-0 z-[5] py-2 px-3 border-r whitespace-nowrap ${stickyBg} ${isDark ? 'border-slate-700/50 text-white shadow-[4px_0_6px_-2px_rgba(0,0,0,0.2)]' : 'border-gray-200 text-gray-900 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]'}`}>
                         {note.projectName || '-'}
                       </td>
-                      <td className={`py-2 px-3 border-r font-mono ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
+                      <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
                         {note.ada || '-'} / {note.parsel || '-'}
                       </td>
-                      <td className={`py-2 px-3 border-r ${isDark ? 'border-slate-700/50 text-concrete-400' : 'border-gray-200 text-gray-600'}`}>
-                        -
+                      <td className={`py-2 px-3 border-r whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-400' : 'border-gray-200 text-gray-600'}`}>
+                        {note.category || '-'}
                       </td>
-                      <td className={`py-2 px-3 border-r ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
+                      <td className={`py-2 px-3 border-r whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
                         {note.progressLevel || '-'}
                       </td>
-                      <td className={`py-2 px-3 border-r font-mono ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
-                        {formatDate(note.createdAt)}
+                      <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
+                        {formatWorkDate(getWorkDate(note))}
                       </td>
-                      <td className={`py-2 px-3 border-r ${isDark ? 'border-slate-700/50' : 'border-gray-200'}`}>
+                      <td className={`py-2 px-3 border-r whitespace-nowrap ${isDark ? 'border-slate-700/50' : 'border-gray-200'}`}>
                         <span
                           className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                             status === 'Onay'
@@ -286,7 +373,7 @@ const TablePage: React.FC = () => {
                           {NOTE_STATUS_CONFIG[status]?.label || 'Eksik'}
                         </span>
                       </td>
-                      <td className={`py-2 px-3 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                      <td className={`py-2 px-3 whitespace-nowrap ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
                         <div className="flex items-center gap-1">
                           {canEditNote(note) && (
                             <button
@@ -316,6 +403,7 @@ const TablePage: React.FC = () => {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </main>
 

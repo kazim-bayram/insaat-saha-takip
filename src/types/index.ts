@@ -84,6 +84,8 @@ export interface Note {
   title?: string;  // Deprecated: kept for backward compatibility with legacy notes
   content: string;
   projectName: string;
+  category?: string;  // Kategori (e.g., Kaba İşler, Elektrik) - optional for legacy notes
+  date?: string;      // Work date YYYY-MM-DD (Yapılan Tarih) - optional for legacy notes
   // Land surveying fields
   ada: string;      // Block
   parsel: string;   // Parcel
@@ -115,6 +117,8 @@ export const getNoteImages = (note: Note): string[] => {
 export interface NoteFormData {
   content: string;
   projectName: string;
+  category: string;       // Kategori (required)
+  date: string;           // Work date YYYY-MM-DD (required)
   ada: string;
   parsel: string;
   progressLevel: string;  // Hakediş / Seviye
@@ -122,6 +126,35 @@ export interface NoteFormData {
   customFields: CustomField[];
   images: File[];  // Changed from single image to array
 }
+
+// Suggested category options for AddNoteModal
+export const CATEGORY_OPTIONS = [
+  'Kaba İşler',
+  'İnce İşler',
+  'Elektrik',
+  'Mekanik',
+  'Peyzaj',
+  'İSG'
+];
+
+// Helper: get work date for display (date or createdAt fallback for legacy notes)
+export const getWorkDate = (note: Note): string => {
+  if (note.date) return note.date;
+  const ts = note.createdAt?.toDate?.();
+  if (ts) {
+    const d = new Date(ts);
+    return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return '';
+};
+
+// Format work date for display (DD.MM.YYYY)
+export const formatWorkDate = (dateStr: string): string => {
+  if (!dateStr) return '-';
+  const [y, m, d] = dateStr.split('-');
+  if (!y || !m || !d) return dateStr;
+  return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y}`;
+};
 
 // Upload progress tracking
 export interface UploadProgress {
