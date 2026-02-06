@@ -59,13 +59,28 @@ export async function getNoteSchema(): Promise<NoteSchema> {
   };
 }
 
+/** Remove undefined values so Firestore accepts the document */
+function stripUndefined<T>(value: T): T {
+  if (value === undefined) return value;
+  if (Array.isArray(value)) return value.map(stripUndefined) as T;
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v !== undefined) out[k] = stripUndefined(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 /** Save the note schema to Firestore (Admin only - enforce in rules) */
 export async function saveNoteSchema(schema: NoteSchema): Promise<void> {
   const ref = doc(db, SYSTEM_SETTINGS_COLLECTION, NOTE_SCHEMA_DOC_ID);
-  await setDoc(ref, {
+  const payload = stripUndefined({
     ...schema,
     updatedAt: new Date()
   });
+  await setDoc(ref, payload as Record<string, unknown>);
 }
 
 /** Subscribe to schema changes (real-time) */

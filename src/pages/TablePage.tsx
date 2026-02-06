@@ -4,8 +4,6 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Sun,
-  Moon,
   Pencil,
   Trash2,
   ArrowLeft,
@@ -25,14 +23,24 @@ import ProfileSettings from '../components/ProfileSettings';
 import UserManagement from '../components/UserManagement';
 import LoadingSpinner from '../components/LoadingSpinner';
 
+const CORE_FIELD_IDS = ['category', 'ada', 'parsel', 'date', 'progressLevel'] as const;
+
 type SortField = 'projectName' | 'date' | 'category' | null;
 type SortDir = 'asc' | 'desc';
 
 const TablePage: React.FC = () => {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
   const { logout, isAdmin } = useAuth();
   const { schema } = useNoteSchema();
   const schemaFields = [...schema.fields].sort((a, b) => a.order - b.order);
+  // Columns: core (category, ada, parsel, date, progressLevel) + any field with showInTable
+  const tableDisplayFields = useMemo(
+    () =>
+      schemaFields.filter(
+        (f) => CORE_FIELD_IDS.includes(f.id as (typeof CORE_FIELD_IDS)[number]) || f.showInTable
+      ),
+    [schemaFields]
+  );
   const {
     notes,
     loading,
@@ -55,6 +63,7 @@ const TablePage: React.FC = () => {
     progress: '',
     status: ''
   });
+  const [dynamicFilters, setDynamicFilters] = useState<Record<string, string>>({});
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -62,7 +71,7 @@ const TablePage: React.FC = () => {
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
 
-  // Apply column filters (AND logic, case-insensitive)
+  // Apply column filters (core + dynamic, AND logic, case-insensitive)
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
       const projectMatch = !filters.project || (note.projectName || '').toLowerCase().includes(filters.project.toLowerCase());
@@ -75,9 +84,20 @@ const TablePage: React.FC = () => {
       const noteStatus = normalizeStatus(note.status);
       const statusMatch = !filters.status || noteStatus === filters.status;
       const dateMatch = !filterDate || getWorkDate(note) === filterDate;
-      return projectMatch && adaParselMatch && categoryMatch && progressMatch && statusMatch && dateMatch;
+      let dynamicMatch = true;
+      tableDisplayFields.forEach((f) => {
+        if (!f.showInTable || !f.showInFilter) return;
+        const filterVal = dynamicFilters[f.id]?.trim();
+        if (!filterVal) return;
+        const cellVal = getNoteFieldValue(note, f.id);
+        const str = cellVal !== undefined && cellVal !== null
+          ? (Array.isArray(cellVal) ? cellVal.join(' ') : String(cellVal))
+          : '';
+        if (!str.toLowerCase().includes(filterVal.toLowerCase())) dynamicMatch = false;
+      });
+      return projectMatch && adaParselMatch && categoryMatch && progressMatch && statusMatch && dateMatch && dynamicMatch;
     });
-  }, [notes, filters, filterDate]);
+  }, [notes, filters, filterDate, tableDisplayFields, dynamicFilters]);
 
   // Sort filtered notes
   const displayNotes = useMemo(() => {
@@ -115,8 +135,8 @@ const TablePage: React.FC = () => {
 
   const handleExport = useCallback(() => {
     const getStatusLabel = (s: string) => NOTE_STATUS_CONFIG[normalizeStatus(s)]?.label || 'Eksik';
-    const schemaCols = schemaFields.map((f) => f.label);
-    const allCols = ['Proje', ...schemaCols, 'Durum', 'Tarih', 'İçerik', 'Yazan'];
+    const exportCols = tableDisplayFields.map((f) => f.label);
+    const allCols = ['Proje', ...exportCols, 'Durum', 'Tarih', 'İçerik', 'Yazan'];
     const data = displayNotes.map((note) => {
       const row: Record<string, string> = {
         'Proje': note.projectName || '',
@@ -125,7 +145,7 @@ const TablePage: React.FC = () => {
         'İçerik': (note.content || '').length > 500 ? (note.content || '').slice(0, 500) + '...' : (note.content || ''),
         'Yazan': note.userName || note.userEmail || ''
       };
-      schemaFields.forEach((f) => {
+      tableDisplayFields.forEach((f) => {
         const v = getNoteFieldValue(note, f.id);
         let display = '';
         if (v !== undefined && v !== null) {
@@ -145,7 +165,7 @@ const TablePage: React.FC = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Saha Raporu');
     XLSX.writeFile(wb, 'Saha_Takip_Raporu.xlsx');
-  }, [displayNotes, schemaFields]);
+  }, [displayNotes, tableDisplayFields]);
 
   const handleEditNote = (note: Note) => {
     setEditingNote(note);
@@ -236,14 +256,6 @@ const TablePage: React.FC = () => {
                 <Download className="w-4 h-4" />
                 Excel'e Aktar
               </button>
-              <button
-                onClick={toggleTheme}
-                className={`p-2 rounded-lg transition-colors ${
-                  isDark ? 'text-yellow-400 hover:bg-slate-700/50' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
               <UserProfileMenu
                 onOpenProfileSettings={() => setShowProfileSettings(true)}
                 onOpenUserManagement={() => setShowUserManagement(true)}
@@ -279,7 +291,7 @@ const TablePage: React.FC = () => {
                       {sortField === 'projectName' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                     </span>
                   </th>
-                  {schemaFields.map((f) => (
+                  {tableDisplayFields.map((f) => (
                     <th
                       key={f.id}
                       className={`py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap ${
@@ -289,7 +301,7 @@ const TablePage: React.FC = () => {
                       {f.label}
                     </th>
                   ))}
-                  {!schemaFields.some((f) => f.id === 'date') && (
+                  {!tableDisplayFields.some((f) => f.id === 'date') && (
                     <th
                       className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none font-mono whitespace-nowrap"
                       onClick={() => handleSort('date')}
@@ -314,7 +326,7 @@ const TablePage: React.FC = () => {
                       className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
                     />
                   </th>
-                  {schemaFields.map((f) => (
+                  {tableDisplayFields.map((f) => (
                     <th key={f.id} className="py-1 px-2 border-r border-gray-600/50">
                       {f.id === 'ada' && (
                         <input
@@ -366,10 +378,20 @@ const TablePage: React.FC = () => {
                           className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
                         />
                       )}
-                      {!['ada', 'parsel', 'category', 'progressLevel', 'date'].includes(f.id) && <span className="block py-1" />}
+                      {/* Filter input: non-core columns with showInTable AND showInFilter */}
+                      {!CORE_FIELD_IDS.includes(f.id as (typeof CORE_FIELD_IDS)[number]) && f.showInTable && f.showInFilter && (
+                        <input
+                          type="text"
+                          value={dynamicFilters[f.id] ?? ''}
+                          onChange={(e) => setDynamicFilters((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                          placeholder="Ara..."
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                        />
+                      )}
+                      {!CORE_FIELD_IDS.includes(f.id as (typeof CORE_FIELD_IDS)[number]) && (!f.showInTable || !f.showInFilter) && <span className="block py-1" />}
                     </th>
                   ))}
-                  {!schemaFields.some((f) => f.id === 'date') && (
+                  {!tableDisplayFields.some((f) => f.id === 'date') && (
                     <th className="py-1 px-2 border-r border-gray-600/50">
                       <input
                         type="date"
@@ -396,7 +418,7 @@ const TablePage: React.FC = () => {
               <tbody>
               {displayNotes.length === 0 ? (
                 <tr>
-                  <td colSpan={5 + schemaFields.length + (schemaFields.some((f) => f.id === 'date') ? 0 : 1)} className={`py-8 text-center whitespace-normal ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
+                  <td colSpan={5 + tableDisplayFields.length + (tableDisplayFields.some((f) => f.id === 'date') ? 0 : 1)} className={`py-8 text-center whitespace-normal ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
                     Henüz not bulunmuyor
                   </td>
                 </tr>
@@ -425,7 +447,7 @@ const TablePage: React.FC = () => {
                           {note.projectName || '-'}
                         </button>
                       </td>
-                      {schemaFields.map((f) => {
+                      {tableDisplayFields.map((f) => {
                         const val = getNoteFieldValue(note, f.id);
                         let display = '-';
                         if (val !== undefined && val !== null) {
@@ -443,7 +465,7 @@ const TablePage: React.FC = () => {
                           </td>
                         );
                       })}
-                      {!schemaFields.some((f) => f.id === 'date') && (
+                      {!tableDisplayFields.some((f) => f.id === 'date') && (
                         <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
                           {formatWorkDate(getWorkDate(note))}
                         </td>

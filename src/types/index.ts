@@ -84,6 +84,8 @@ export interface FormField {
   order: number;
   placeholder?: string;   // Helper text inside inputs
   description?: string;   // Small info text below the input
+  showInTable?: boolean;  // Show in table columns (default: false)
+  showInFilter?: boolean; // Show in filter panels (default: false)
 }
 
 export interface NoteSchema {

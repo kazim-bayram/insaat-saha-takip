@@ -6,28 +6,21 @@ import {
   Calendar,
   FolderOpen,
   User,
-  LayoutGrid,
-  List,
   FileText,
   ChevronDown,
-  Sun,
-  Moon,
-  CheckCircle2,
-  Users,
-  BarChart3,
   Search,
   MapPin,
   SlidersHorizontal,
   Tag,
   Trash2,
-  AlertTriangle,
   FileSpreadsheet,
   Settings2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotes } from '../hooks/useNotes';
-import { Note, FilterOptions, NoteFormData, normalizeStatus, getWorkDate } from '../types';
+import { useNoteSchema } from '../hooks/useNoteSchema';
+import { Note, FilterOptions, NoteFormData, normalizeStatus, getNoteFieldValue } from '../types';
 import NoteCard from './NoteCard';
 import NoteDetailModal from './NoteDetailModal';
 import AddNoteModal from './AddNoteModal';
@@ -38,7 +31,8 @@ import LoadingSpinner, { NotesGridSkeleton } from './LoadingSpinner';
 
 const Dashboard: React.FC = () => {
   const { logout, isAdmin, currentUser } = useAuth();
-  const { toggleTheme, isDark } = useTheme();
+  const { isDark } = useTheme();
+  const { schema } = useNoteSchema();
   const {
     notes,
     loading,
@@ -67,9 +61,8 @@ const Dashboard: React.FC = () => {
   const [showUserManagement, setShowUserManagement] = useState(false);
 
   // Görünüm durumu
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [isStatsOpen, setIsStatsOpen] = useState(false);
 
   // Filtre durumu
   const [filters, setFilters] = useState<FilterOptions>({
@@ -83,11 +76,28 @@ const Dashboard: React.FC = () => {
     dateFrom: '',
     dateTo: ''
   });
+  const [dynamicFilters, setDynamicFilters] = useState<Record<string, string>>({});
 
-  // Filtreleri uygula - works for both admin and workers
+  // Filtreleri uygula - static (filterNotes) + dynamic (schema fields with showInFilter)
   const filteredNotes = useMemo(() => {
-    return filterNotes(filters);
-  }, [notes, filters, filterNotes]);
+    const base = filterNotes(filters);
+    if (!schema) return base;
+    return base.filter((note) =>
+      schema.fields.every((field) => {
+        if (!field.showInFilter) return true;
+        const filterValue = (dynamicFilters[field.id] || '').trim();
+        if (!filterValue) return true;
+        const noteValue = getNoteFieldValue(note, field.id);
+        const str =
+          noteValue !== undefined && noteValue !== null
+            ? Array.isArray(noteValue)
+              ? noteValue.join(' ')
+              : String(noteValue)
+            : '';
+        return str.toLowerCase().includes(filterValue.toLowerCase());
+      })
+    );
+  }, [notes, filters, filterNotes, schema, dynamicFilters]);
 
   // Role-based visibility: Workers see ONLY their own notes; Admins see ALL
   const visibleNotes = useMemo(() => {
@@ -98,22 +108,6 @@ const Dashboard: React.FC = () => {
   // Filtre dropdown'ları için benzersiz değerler
   const projectNames = useMemo(() => getProjectNames(), [getProjectNames]);
   const workerNames = useMemo(() => getWorkerNames(), [getWorkerNames]);
-
-  // Enhanced analytics for collapsible panel
-  const analyticsStats = useMemo(() => {
-    const total = notes.length;
-    const onay = notes.filter(n => normalizeStatus(n.status) === 'Onay').length;
-    const eksik = notes.filter(n => normalizeStatus(n.status) === 'Eksik').length;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
-    const todaysNotes = notes.filter(n => getWorkDate(n) === todayStr).length;
-    const activeProjects = new Set(notes.map(n => n.projectName).filter(Boolean)).size;
-    const activeWorkers = new Set(notes.map(n => n.userId).filter(Boolean)).size;
-    const completionRate = total > 0 ? Math.round((onay / total) * 100) : 0;
-
-    return { total, onay, eksik, todaysNotes, activeProjects, activeWorkers, completionRate };
-  }, [notes]);
 
   const handleNoteClick = (note: Note) => {
     setSelectedNote(note);
@@ -170,10 +164,20 @@ const Dashboard: React.FC = () => {
       dateFrom: '',
       dateTo: ''
     });
+    setDynamicFilters({});
   };
 
-  const hasActiveFilters = filters.searchQuery || filters.workerEmail || filters.projectName || 
-                            filters.ada || filters.parsel || filters.progressLevel || filters.status || filters.dateFrom || filters.dateTo;
+  const hasActiveFilters =
+    filters.workerEmail ||
+    filters.projectName ||
+    filters.ada ||
+    filters.parsel ||
+    filters.progressLevel ||
+    filters.status ||
+    filters.dateFrom ||
+    filters.dateTo ||
+    Object.values(dynamicFilters).some((v) => (v || '').trim() !== '');
+  const hasActiveSearch = !!filters.searchQuery;
 
   const handleLogout = async () => {
     try {
@@ -254,60 +258,39 @@ const Dashboard: React.FC = () => {
                 </>
               )}
 
-              {/* Analytics Toggle Button - Admin only */}
-              {isAdmin && (
-              <button
-                onClick={() => setIsStatsOpen(!isStatsOpen)}
-                className={`p-2 rounded-lg transition-colors ${
-                  isStatsOpen
-                    ? 'bg-safety-orange/20 text-safety-orange'
-                    : isDark 
-                      ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
-                      : 'text-gray-600 hover:bg-gray-100'
-                }`}
-                title="Saha Analizi"
-              >
-                <BarChart3 className="w-5 h-5" />
-              </button>
-              )}
-
-              {/* Search/Filter Toggle Button */}
-              <button
-                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                className={`relative p-2 rounded-lg transition-colors ${
-                  isFiltersOpen || hasActiveFilters
-                    ? 'bg-safety-orange/20 text-safety-orange'
-                    : isDark 
-                      ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' 
-                      : 'text-gray-600 hover:bg-gray-100'
-                }`}
-                title="Ara ve Filtrele"
-              >
-                <SlidersHorizontal className="w-5 h-5" />
-                {hasActiveFilters && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-safety-orange rounded-full border-2 border-slate-850" />
-                )}
-              </button>
-
-              {/* Tema Değiştirici */}
-              <button
-                onClick={toggleTheme}
-                className={`p-2 rounded-lg transition-colors ${
-                  isDark 
-                    ? 'text-yellow-400 hover:bg-slate-700/50' 
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-                title={isDark ? 'Açık Tema' : 'Koyu Tema'}
-              >
-                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
-
               {/* User Profile Menu */}
               <UserProfileMenu
                 onOpenProfileSettings={() => setShowProfileSettings(true)}
                 onOpenUserManagement={() => setShowUserManagement(true)}
                 onLogout={handleLogout}
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible Search Panel */}
+        <div 
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${
+            isSearchOpen ? 'max-h-[100px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
+        >
+          <div className={`border-t ${isDark ? 'border-slate-700/50 bg-slate-900/50' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              {/* Search Bar - Full Width */}
+              <div className="relative">
+                <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                <input
+                  type="text"
+                  value={filters.searchQuery}
+                  onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                  placeholder="Proje adı veya içerikte ara..."
+                  className={`w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-safety-orange/20 focus:border-safety-orange transition-all ${
+                    isDark 
+                      ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500' 
+                      : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 shadow-sm'
+                  }`}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -320,24 +303,6 @@ const Dashboard: React.FC = () => {
         >
           <div className={`border-t ${isDark ? 'border-slate-700/50 bg-slate-900/50' : 'border-gray-200 bg-gray-50'}`}>
             <div className="max-w-7xl mx-auto px-4 py-4">
-              {/* Search Bar - Full Width */}
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type="text"
-                    value={filters.searchQuery}
-                    onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                    placeholder="Proje adı veya içerikte ara..."
-                    className={`w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-safety-orange/20 focus:border-safety-orange transition-all ${
-                      isDark 
-                        ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500' 
-                        : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 shadow-sm'
-                    }`}
-                  />
-                </div>
-              </div>
-
               {/* Filter Grid - Responsive */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
                 {/* Ada (Island) */}
@@ -497,6 +462,28 @@ const Dashboard: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {/* Dynamic filters (schema fields with showInFilter) */}
+                {schema?.fields
+                  ?.filter((field) => field.showInFilter)
+                  .map((field) => (
+                    <div key={field.id}>
+                      <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                        {field.label}
+                      </label>
+                      <input
+                        type="text"
+                        value={dynamicFilters[field.id] ?? ''}
+                        onChange={(e) => setDynamicFilters((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                        placeholder="Ara..."
+                        className={`w-full rounded-lg pl-3 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                          isDark
+                            ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500'
+                            : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 shadow-sm'
+                        }`}
+                      />
+                    </div>
+                  ))}
               </div>
 
               {/* Filtreleri Temizle - Text button aligned right */}
@@ -588,127 +575,28 @@ const Dashboard: React.FC = () => {
                       </button>
                     </span>
                   )}
+                  {schema?.fields
+                    ?.filter((f) => f.showInFilter && (dynamicFilters[f.id] || '').trim())
+                    .map((f) => (
+                      <span
+                        key={f.id}
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}
+                      >
+                        {f.label}: {dynamicFilters[f.id]}
+                        <button
+                          onClick={() => setDynamicFilters((prev) => ({ ...prev, [f.id]: '' }))}
+                          className="hover:text-red-400 ml-1"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Collapsible Analytics Panel */}
-        <div 
-          className={`overflow-hidden transition-all duration-300 ease-in-out ${
-            isStatsOpen ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
-          }`}
-        >
-          <div className={`border-t ${isDark ? 'border-slate-700/50 bg-slate-900/50' : 'border-gray-200 bg-gray-50'}`}>
-            <div className="max-w-7xl mx-auto px-4 py-4">
-              <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                <BarChart3 className="w-4 h-4" />
-                Saha Analizi
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {/* Genel Durum (Completion Rate) */}
-                <div className={`rounded-xl p-4 border col-span-2 md:col-span-1 ${
-                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
-                }`}>
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className={`p-2 rounded-lg ${isDark ? 'bg-green-600/20' : 'bg-green-100'}`}>
-                      <CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-                    </div>
-                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                      Genel Durum
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                      %{analyticsStats.completionRate}
-                    </span>
-                  </div>
-                  <div className={`mt-2 h-2 rounded-full overflow-hidden ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
-                    <div 
-                      className="h-full bg-green-500 rounded-full transition-all duration-500" 
-                      style={{ width: `${analyticsStats.completionRate}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Kritik İşler (Pending - Eksik) */}
-                <div className={`rounded-xl p-4 border ${
-                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
-                }`}>
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className={`p-2 rounded-lg ${isDark ? 'bg-red-600/20' : 'bg-red-100'}`}>
-                      <AlertTriangle className={`w-4 h-4 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
-                    </div>
-                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                      Kritik İşler
-                    </span>
-                  </div>
-                  <p className={`text-2xl font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                    {analyticsStats.eksik}
-                  </p>
-                  <span className={`text-[10px] ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
-                    Bekleyen Eksik
-                  </span>
-                </div>
-
-                {/* Bugünün Raporları */}
-                <div className={`rounded-xl p-4 border ${
-                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
-                }`}>
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600/20' : 'bg-blue-100'}`}>
-                      <Calendar className={`w-4 h-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-                    </div>
-                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                      Bugünün Raporları
-                    </span>
-                  </div>
-                  <p className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {analyticsStats.todaysNotes}
-                  </p>
-                </div>
-
-                {/* Aktif Projeler */}
-                <div className={`rounded-xl p-4 border ${
-                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
-                }`}>
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
-                      <FolderOpen className={`w-4 h-4 ${isDark ? 'text-concrete-300' : 'text-gray-600'}`} />
-                    </div>
-                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                      Aktif Projeler
-                    </span>
-                  </div>
-                  <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {analyticsStats.activeProjects}
-                  </p>
-                </div>
-
-                {/* Saha Yoğunluğu (Active Workers) */}
-                <div className={`rounded-xl p-4 border ${
-                  isDark ? 'bg-slate-850 border-slate-700/50' : 'bg-white border-gray-200 shadow-sm'
-                }`}>
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className={`p-2 rounded-lg ${isDark ? 'bg-blue-600/20' : 'bg-blue-100'}`}>
-                      <Users className={`w-4 h-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-                    </div>
-                    <span className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                      Saha Yoğunluğu
-                    </span>
-                  </div>
-                  <p className={`text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {analyticsStats.activeWorkers}
-                  </p>
-                  <span className={`text-[10px] ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
-                    Aktif çalışan
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </header>
 
       {/* Ana İçerik */}
@@ -723,7 +611,7 @@ const Dashboard: React.FC = () => {
               <span className={isDark ? 'text-concrete-500' : 'text-gray-500'}>
                 {visibleNotes.length === 1 ? 'Not' : 'Not'}
               </span>
-              {hasActiveFilters && (
+              {(hasActiveFilters || hasActiveSearch) && (
                 <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-safety-orange/20 text-safety-orange' : 'bg-orange-100 text-orange-700'}`}>
                   Filtrelenmiş
                 </span>
@@ -731,35 +619,39 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Görünüm Değiştirici & Filtre Butonu */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            {/* Görünüm Modu */}
-            <div className={`flex rounded-lg p-1 ${isDark ? 'bg-slate-800' : 'bg-gray-200'}`}>
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'grid'
-                    ? isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-900 shadow-sm'
-                    : isDark ? 'text-concrete-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'
-                }`}
-                title="Izgara görünümü"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'list'
-                    ? isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-900 shadow-sm'
-                    : isDark ? 'text-concrete-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'
-                }`}
-                title="Liste görünümü"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
+          {/* Search & Filter Buttons */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            {/* Search Button */}
+            <button
+              onClick={() => setIsSearchOpen(!isSearchOpen)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+                isSearchOpen || hasActiveSearch
+                  ? 'bg-safety-orange/20 text-safety-orange border border-safety-orange/30'
+                  : isDark
+                    ? 'bg-white/5 border border-slate-700 text-concrete-400 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+              title="Ara"
+            >
+              <Search className="w-4 h-4" />
+              <span className="text-sm font-medium">Ara</span>
+            </button>
 
-
+            {/* Filter Button */}
+            <button
+              onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+                isFiltersOpen || hasActiveFilters
+                  ? 'bg-safety-orange/20 text-safety-orange border border-safety-orange/30'
+                  : isDark
+                    ? 'bg-white/5 border border-slate-700 text-concrete-400 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+              title="Filtrele"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span className="text-sm font-medium">Filtrele</span>
+            </button>
           </div>
         </div>
 
@@ -784,14 +676,14 @@ const Dashboard: React.FC = () => {
               <FileText className={`w-10 h-10 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
             </div>
             <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {hasActiveFilters ? 'Eşleşen not bulunamadı' : 'Henüz not yok'}
+              {(hasActiveFilters || hasActiveSearch) ? 'Eşleşen not bulunamadı' : 'Henüz not yok'}
             </h3>
             <p className={`mb-6 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-              {hasActiveFilters
+              {(hasActiveFilters || hasActiveSearch)
                 ? 'Aradığınızı bulmak için filtreleri değiştirmeyi deneyin.'
                 : 'İlk notunuzu ekleyerek saha sorunlarını belgelemeye başlayın.'}
             </p>
-            {!hasActiveFilters && (
+            {!(hasActiveFilters || hasActiveSearch) && (
               <button
                 onClick={() => setShowAddModal(true)}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-safety-orange hover:bg-safety-orange-dark text-white font-semibold rounded-xl transition-colors"
@@ -802,7 +694,7 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className={viewMode === 'grid' ? 'masonry-grid' : 'space-y-4'}>
+          <div className="masonry-grid">
             {visibleNotes.map((note) => (
               <NoteCard
                 key={note.id}

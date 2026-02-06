@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { FormField, NoteSchema, FormFieldType } from '../../types';
 import { getNoteSchema, saveNoteSchema, labelToKey, DEFAULT_NOTE_SCHEMA } from '../../services/noteSchemaService';
 
@@ -182,6 +183,7 @@ function FieldPreview({ field, isDark }: { field: FormField; isDark: boolean }) 
 
 const FormBuilder: React.FC = () => {
   const { isDark } = useTheme();
+  const { currentUser, isAdmin } = useAuth();
   const [schema, setSchema] = useState<NoteSchema | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -197,7 +199,9 @@ const FormBuilder: React.FC = () => {
     options: [],
     order: 0,
     placeholder: '',
-    description: ''
+    description: '',
+    showInTable: false,
+    showInFilter: false
   });
   const [idManuallyEdited, setIdManuallyEdited] = useState(false);
 
@@ -259,10 +263,12 @@ const FormBuilder: React.FC = () => {
       options: type === 'select' || type === 'multiselect' ? (newField.options || []) : undefined,
       order: maxOrder + 1,
       placeholder: newField.placeholder || undefined,
-      description: newField.description || undefined
+      description: newField.description || undefined,
+      showInTable: Boolean(newField.showInTable),
+      showInFilter: Boolean(newField.showInFilter)
     };
     setSchema({ ...schema, fields: [...schema.fields, field].sort((a, b) => a.order - b.order) });
-    setNewField({ id: '', label: '', type: 'text', required: false, options: [], order: 0, placeholder: '', description: '' });
+    setNewField({ id: '', label: '', type: 'text', required: false, options: [], order: 0, placeholder: '', description: '', showInTable: false, showInFilter: false });
     setIdManuallyEdited(false);
     setShowAddForm(false);
   };
@@ -325,8 +331,20 @@ const FormBuilder: React.FC = () => {
       await saveNoteSchema(schema);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (e) {
-      setError('Şema kaydedilemedi. Yönetici yetkinizi kontrol edin.');
+    } catch (e: unknown) {
+      console.error('Schema save error:', e);
+      const err = e as { code?: string; message?: string };
+      const code = err?.code ?? '';
+      const detail = err?.message ?? (e instanceof Error ? e.message : String(e));
+      const isPermissionDenied = code === 'permission-denied' || String(detail).toLowerCase().includes('permission');
+      const uidHint = currentUser?.uid ? ` (Firestore'da users koleksiyonunda belge ID: ${currentUser.uid})` : '';
+      const adminHint = isAdmin
+        ? ' Uygulama sizi yönetici sayıyor; Firestore kuralları yazmaya izin vermiyor.'
+        : ' Uygulama sizi yönetici olarak görmüyor; users belgenizde role: "admin" olmalı.';
+      const msg = isPermissionDenied
+        ? `Yetki reddedildi.${adminHint}${uidHint} Belgede "role" alanı "admin" (küçük harf) olmalı. Kuralları deploy ettiniz mi?${detail ? ` Sunucu: ${detail}` : ''}`
+        : `Şema kaydedilemedi. ${detail ? detail : 'Yönetici yetkinizi kontrol edin.'}`;
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -389,9 +407,9 @@ const FormBuilder: React.FC = () => {
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {error && (
-          <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-            <p className="text-red-300 text-sm">{error}</p>
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-red-300 text-sm break-words whitespace-pre-wrap flex-1">{error}</p>
           </div>
         )}
         {success && (
@@ -408,7 +426,7 @@ const FormBuilder: React.FC = () => {
               onClick={() => {
                 setShowAddForm(!showAddForm);
                 setError(null);
-                setNewField({ id: '', label: '', type: 'text', required: false, options: [], order: 0, placeholder: '', description: '' });
+                setNewField({ id: '', label: '', type: 'text', required: false, options: [], order: 0, placeholder: '', description: '', showInTable: false, showInFilter: false });
                 setIdManuallyEdited(false);
               }}
               className="flex items-center gap-2 px-4 py-2 bg-safety-orange hover:bg-safety-orange-dark text-white rounded-lg text-sm font-medium"
@@ -458,6 +476,33 @@ const FormBuilder: React.FC = () => {
                     <label htmlFor="add-required" className={`text-sm ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
                       Bu alanın doldurulması zorunlu olsun mu?
                     </label>
+                  </div>
+                  <div className={`rounded-lg border p-3 space-y-3 ${isDark ? 'border-slate-700/50 bg-slate-800/30' : 'border-gray-200 bg-gray-100/50'}`}>
+                    <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>Görünürlük Ayarları</p>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="add-showInTable"
+                        checked={Boolean(newField.showInTable)}
+                        onChange={(e) => setNewField((p) => ({ ...p, showInTable: e.target.checked }))}
+                        className="rounded"
+                      />
+                      <label htmlFor="add-showInTable" className={`text-sm ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                        Tablo Sütunlarında Göster
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="add-showInFilter"
+                        checked={Boolean(newField.showInFilter)}
+                        onChange={(e) => setNewField((p) => ({ ...p, showInFilter: e.target.checked }))}
+                        className="rounded"
+                      />
+                      <label htmlFor="add-showInFilter" className={`text-sm ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                        Filtre Alanlarında Göster
+                      </label>
+                    </div>
                   </div>
                   {(newField.type === 'select' || newField.type === 'multiselect') && (
                     <div>
@@ -650,6 +695,33 @@ const FormBuilder: React.FC = () => {
                               <label htmlFor={`req-${field.id}`} className={`text-sm ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
                                 Bu alanın doldurulması zorunlu olsun mu?
                               </label>
+                            </div>
+                            <div className={`rounded-lg border p-3 space-y-3 ${isDark ? 'border-slate-700/50 bg-slate-800/30' : 'border-gray-200 bg-gray-100/50'}`}>
+                              <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>Görünürlük Ayarları</p>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  id={`showInTable-${field.id}`}
+                                  checked={Boolean(field.showInTable)}
+                                  onChange={(e) => handleUpdateField(index, { showInTable: e.target.checked })}
+                                  className="rounded"
+                                />
+                                <label htmlFor={`showInTable-${field.id}`} className={`text-sm ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                                  Tablo Sütunlarında Göster
+                                </label>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  id={`showInFilter-${field.id}`}
+                                  checked={Boolean(field.showInFilter)}
+                                  onChange={(e) => handleUpdateField(index, { showInFilter: e.target.checked })}
+                                  className="rounded"
+                                />
+                                <label htmlFor={`showInFilter-${field.id}`} className={`text-sm ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                                  Filtre Alanlarında Göster
+                                </label>
+                              </div>
                             </div>
                             {(field.type === 'select' || field.type === 'multiselect') && (
                               <div>

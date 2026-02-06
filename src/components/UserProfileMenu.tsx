@@ -4,7 +4,9 @@ import {
   Settings,
   UserCog,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,7 +22,7 @@ const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
   onOpenUserManagement,
   onLogout
 }) => {
-  const { isDark } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
   const { userProfile, isAdmin } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -112,6 +114,19 @@ const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
               <span>Kullanıcı Yönetimi</span>
             </button>
           )}
+
+          {/* Theme Toggle */}
+          <button
+            onClick={() => handleItemClick(toggleTheme)}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
+              isDark 
+                ? 'text-white hover:bg-slate-700' 
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            <span>{isDark ? 'Gündüz Modu' : 'Gece Modu'}</span>
+          </button>
 
           {/* Divider */}
           <div className={`border-t ${isDark ? 'border-slate-700' : 'border-gray-200'}`} />

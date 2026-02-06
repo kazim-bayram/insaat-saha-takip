@@ -45,11 +45,12 @@ service cloud.firestore {
     }
     
     // System settings (note schema, etc.) - Admin write only
-    match /system_settings/{docId} {
-      // Everyone authenticated can read (workers need schema for Add Note form)
-      allow read: if isAuthenticated();
-      // Only admins can write
-      allow write: if isAdmin();
+    // Admin = users/{uid} document exists and has role == 'admin' (string)
+    match /system_settings/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+                   exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
     }
     
     // Notes collection rules
