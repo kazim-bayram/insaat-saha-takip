@@ -1,50 +1,20 @@
 import React, { useState } from 'react';
-import { Lock, User, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon, AtSign, CheckCircle2, XCircle } from 'lucide-react';
+import { Lock, AlertCircle, Loader2, Eye, EyeOff, Sun, Moon, AtSign } from 'lucide-react';
 import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { auth } from '../firebase/config';
 
 const Login: React.FC = () => {
-  const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
 
-  const { login, register, checkUsernameAvailable } = useAuth();
+  const { login } = useAuth();
   const { toggleTheme, isDark } = useTheme();
-
-  // Debounced username check
-  const handleUsernameChange = async (value: string) => {
-    setUsername(value);
-    
-    if (!value.trim() || value.length < 3) {
-      setUsernameStatus('idle');
-      return;
-    }
-
-    // Validate username format (alphanumeric and underscores only)
-    if (!/^[a-zA-Z0-9_]+$/.test(value)) {
-      setUsernameStatus('idle');
-      return;
-    }
-
-    setUsernameStatus('checking');
-    
-    try {
-      const isAvailable = await checkUsernameAvailable(value);
-      setUsernameStatus(isAvailable ? 'available' : 'taken');
-    } catch {
-      setUsernameStatus('idle');
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,59 +22,15 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      if (isRegister) {
-        // Registration validation
-        if (!displayName.trim()) {
-          throw new Error('Lütfen adınızı ve soyadınızı girin');
-        }
-        if (!username.trim() || username.length < 3) {
-          throw new Error('Kullanıcı adı en az 3 karakter olmalıdır');
-        }
-        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-          throw new Error('Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir');
-        }
-        if (usernameStatus === 'taken') {
-          throw new Error('Bu kullanıcı adı zaten alınmış');
-        }
-        if (password.length < 6) {
-          throw new Error('Şifre en az 6 karakter olmalıdır');
-        }
-        if (password !== confirmPassword) {
-          throw new Error('Şifreler eşleşmiyor');
-        }
-        
-        try {
-          await register(username, password, displayName);
-        } catch (registerErr: any) {
-          console.error('Registration error:', registerErr);
-          
-          // Check if it's a Firestore permission error
-          if (registerErr.message?.includes('permission') || 
-              registerErr.message?.includes('PERMISSION_DENIED') ||
-              registerErr.code === 'permission-denied' ||
-              registerErr.code === 'PERMISSION_DENIED') {
-            throw new Error(
-              'Profil kaydedilemedi. Firestore kuralları güncellenmeli. Hata: ' + (registerErr.message || registerErr.code)
-            );
-          }
-          throw registerErr;
-        }
+      // Set persistence based on "Remember Me" checkbox
+      if (rememberMe) {
+        await setPersistence(auth, browserLocalPersistence);
       } else {
-        // Login with Remember Me persistence
-        try {
-          // Set persistence based on "Remember Me" checkbox
-          if (rememberMe) {
-            await setPersistence(auth, browserLocalPersistence);
-          } else {
-            await setPersistence(auth, browserSessionPersistence);
-          }
-          
-          // Username-only login (appends @insaat.local)
-          await login(username, password);
-        } catch (loginErr: any) {
-          throw loginErr;
-        }
+        await setPersistence(auth, browserSessionPersistence);
       }
+      
+      // Username-only login (appends @insaat.local)
+      await login(username, password);
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Kimlik doğrulama başarısız';
       
@@ -113,20 +39,12 @@ const Login: React.FC = () => {
         setError('Kullanıcı adı veya şifre hatalı');
       } else if (message.includes('auth/user-not-found')) {
         setError('Kullanıcı bulunamadı');
-      } else if (message.includes('auth/email-already-in-use')) {
-        setError('Bu kullanıcı adı zaten alınmış');
-      } else if (message.includes('auth/weak-password')) {
-        setError('Şifre en az 6 karakter olmalıdır');
       } else if (message.includes('auth/invalid-email')) {
         setError('Kullanıcı adı geçersiz');
       } else if (message.includes('auth/too-many-requests')) {
         setError('Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin');
       } else if (message.includes('Hesap erişime kapatılmıştır')) {
         setError('Hesabınız erişime kapatılmıştır. Lütfen yönetici ile iletişime geçin');
-      } else if (message.includes('Şifreler eşleşmiyor')) {
-        setError('Şifreler eşleşmiyor');
-      } else if (message.includes('zaten alınmış')) {
-        setError(message);
       } else {
         setError(message);
       }
@@ -202,7 +120,7 @@ const Login: React.FC = () => {
             : 'bg-white/90 backdrop-blur-sm border-gray-200'
         }`}>
           <h2 className={`text-xl font-semibold mb-6 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            {isRegister ? 'Hesap Oluştur' : 'Hoş Geldiniz'}
+            Hoş Geldiniz
           </h2>
 
           {/* Hata Mesajı */}
@@ -214,30 +132,6 @@ const Login: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Ad Soyad Alanı (Sadece Kayıt) */}
-            {isRegister && (
-              <div className="animate-slide-up">
-                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                  Ad Soyad
-                </label>
-                <div className="relative">
-                  <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Ahmet Yılmaz"
-                    className={`w-full rounded-xl pl-12 pr-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                    }`}
-                    required={isRegister}
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Kullanıcı Adı */}
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
@@ -248,42 +142,17 @@ const Login: React.FC = () => {
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => isRegister ? handleUsernameChange(e.target.value.toLowerCase()) : setUsername(e.target.value.toLowerCase())}
-                  placeholder={isRegister ? "ahmet_yilmaz" : "Kullanıcı adınızı girin"}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                  placeholder="Kullanıcı adınızı girin"
                   className={`w-full rounded-xl pl-12 pr-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
                     isDark 
                       ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
                       : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                  } ${isRegister && usernameStatus === 'taken' ? 'border-red-500' : ''} ${isRegister && usernameStatus === 'available' ? 'border-green-500' : ''}`}
+                  }`}
                   required
                   minLength={3}
                 />
-                {/* Username status indicator (only in register mode) */}
-                {isRegister && (
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    {usernameStatus === 'checking' && (
-                      <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
-                    )}
-                    {usernameStatus === 'available' && (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    )}
-                    {usernameStatus === 'taken' && (
-                      <XCircle className="w-5 h-5 text-red-500" />
-                    )}
-                  </div>
-                )}
               </div>
-              {isRegister && usernameStatus === 'taken' && (
-                <p className="text-red-400 text-xs mt-1">Bu kullanıcı adı zaten kullanılıyor</p>
-              )}
-              {isRegister && usernameStatus === 'available' && (
-                <p className="text-green-400 text-xs mt-1">Kullanıcı adı müsait</p>
-              )}
-              {isRegister && (
-                <p className={`text-xs mt-1 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
-                  Sadece harf, rakam ve alt çizgi (_) kullanabilirsiniz
-                </p>
-              )}
             </div>
 
             {/* Şifre Alanı */}
@@ -316,74 +185,30 @@ const Login: React.FC = () => {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              {isRegister && (
-                <p className={`text-xs mt-1 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
-                  En az 6 karakter
-                </p>
-              )}
             </div>
 
-            {/* Şifre Tekrar Alanı (Sadece Kayıt) */}
-            {isRegister && (
-              <div className="animate-slide-up">
-                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                  Şifre Tekrar
-                </label>
-                <div className="relative">
-                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={`w-full rounded-xl pl-12 pr-12 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                      isDark 
-                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                    } ${password && confirmPassword && password !== confirmPassword ? 'border-red-500' : ''}`}
-                    required
-                    minLength={6}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${
-                      isDark ? 'text-concrete-500 hover:text-concrete-300' : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-                {password && confirmPassword && password !== confirmPassword && (
-                  <p className="text-red-400 text-xs mt-1">Şifreler eşleşmiyor</p>
-                )}
-              </div>
-            )}
-
-            {/* Beni Hatırla (Sadece Giriş) */}
-            {!isRegister && (
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="rememberMe"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className={`w-4 h-4 rounded border transition-colors cursor-pointer ${
-                    isDark
-                      ? 'bg-slate-900/50 border-slate-600 text-safety-orange focus:ring-safety-orange/20 focus:ring-offset-slate-850'
-                      : 'bg-white border-gray-300 text-safety-orange focus:ring-safety-orange/20 focus:ring-offset-white'
-                  }`}
-                />
-                <label
-                  htmlFor="rememberMe"
-                  className={`ml-2 text-sm cursor-pointer select-none ${
-                    isDark ? 'text-concrete-300' : 'text-gray-700'
-                  }`}
-                >
-                  Beni Hatırla
-                </label>
-              </div>
-            )}
+            {/* Beni Hatırla */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="rememberMe"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className={`w-4 h-4 rounded border transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-slate-900/50 border-slate-600 text-safety-orange focus:ring-safety-orange/20 focus:ring-offset-slate-850'
+                    : 'bg-white border-gray-300 text-safety-orange focus:ring-safety-orange/20 focus:ring-offset-white'
+                }`}
+              />
+              <label
+                htmlFor="rememberMe"
+                className={`ml-2 text-sm cursor-pointer select-none ${
+                  isDark ? 'text-concrete-300' : 'text-gray-700'
+                }`}
+              >
+                Beni Hatırla
+              </label>
+            </div>
 
             {/* Gönder Butonu */}
             <button
@@ -394,34 +219,18 @@ const Login: React.FC = () => {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {isRegister ? 'Hesap Oluşturuluyor...' : 'Giriş Yapılıyor...'}
+                  Giriş Yapılıyor...
                 </>
               ) : (
-                isRegister ? 'Hesap Oluştur' : 'Giriş Yap'
+                'Giriş Yap'
               )}
             </button>
           </form>
 
-          {/* Kayıt/Giriş Geçişi */}
+          {/* Info text */}
           <div className="mt-6 text-center">
-            <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-              {isRegister ? 'Zaten hesabınız var mı?' : 'Hesabınız yok mu?'}
-              <button
-                onClick={() => {
-                  setIsRegister(!isRegister);
-                  setError(null);
-                  // Reset fields when switching
-                  setUsername('');
-                  setPassword('');
-                  setConfirmPassword('');
-                  setDisplayName('');
-                  setUsernameStatus('idle');
-                  setRememberMe(false);
-                }}
-                className="ml-2 text-safety-orange hover:text-safety-orange-light font-medium transition-colors"
-              >
-                {isRegister ? 'Giriş Yap' : 'Hesap Oluştur'}
-              </button>
+            <p className={`text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>
+              Hesap bilgilerinizi yöneticinizden alabilirsiniz.
             </p>
           </div>
         </div>

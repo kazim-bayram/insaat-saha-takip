@@ -62,6 +62,7 @@ export interface UserProfile {
   role: UserRole;
   createdAt: Timestamp;
   isActive?: boolean; // For soft delete - false means disabled
+  mustChangePassword?: boolean; // Force password change on first login
 }
 
 // Custom field for dynamic key-value pairs

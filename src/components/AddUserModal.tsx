@@ -113,6 +113,7 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
           displayName: displayName ?? '',
           role: role ?? 'worker',
           isActive: true,
+          mustChangePassword: true,
           createdAt: serverTimestamp()
         };
         
@@ -205,9 +206,14 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onUserCrea
 
           {/* Success Message */}
           {success && (
-            <div className="p-3 rounded-xl flex items-center gap-3 bg-green-500/10 border border-green-500/30">
-              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
-              <p className="text-green-300 text-sm">Kullanıcı başarıyla oluşturuldu!</p>
+            <div className="p-3 rounded-xl flex flex-col gap-2 bg-green-500/10 border border-green-500/30">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                <p className="text-green-300 text-sm">Kullanıcı başarıyla oluşturuldu!</p>
+              </div>
+              <p className={`text-xs ml-8 ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
+                Kullanıcı ilk girişte şifresini değiştirmek zorunda olacaktır.
+              </p>
             </div>
           )}
 

@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import {
   User,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   updateProfile,
@@ -13,13 +12,11 @@ import {
 import { 
   doc, 
   getDoc, 
-  setDoc, 
   getDocs,
   updateDoc,
   collection, 
   query, 
-  where, 
-  serverTimestamp 
+  where
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { UserProfile, UserRole } from '../types';
@@ -29,13 +26,13 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, displayName: string, role?: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   isAdmin: boolean;
   // Profile management functions
   checkUsernameAvailable: (username: string, excludeUid?: string) => Promise<boolean>;
   updateUserProfile: (data: { displayName?: string; username?: string }) => Promise<void>;
   updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  updatePasswordForced: (newPassword: string) => Promise<void>;
   // Admin functions
   getAllUsers: () => Promise<UserProfile[]>;
   updateUserRole: (userId: string, newRole: UserRole) => Promise<void>;
@@ -77,34 +74,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Create user profile in Firestore
-  const createUserProfile = async (
-    user: User,
-    displayName: string,
-    username: string,
-    role: UserRole = 'worker'
-  ): Promise<UserProfile> => {
-    const userDocRef = doc(db, 'users', user.uid);
-    
-    // Create clean user data object - ensure NO undefined values
-    const userData = {
-      uid: user.uid ?? '',
-      email: user.email ?? '',
-      username: (username ?? '').toLowerCase(),
-      displayName: displayName ?? '',
-      role: role ?? 'worker',
-      isActive: true,
-      createdAt: serverTimestamp()
-    };
-    
-    // Create user document with server timestamp and isActive flag
-    await setDoc(userDocRef, userData);
-
-    // Fetch the created profile to return with actual timestamp
-    const userDoc = await getDoc(userDocRef);
-    return userDoc.data() as UserProfile;
-  };
-
   // Check if username is available
   const checkUsernameAvailable = async (username: string, excludeUid?: string): Promise<boolean> => {
     const usersRef = collection(db, 'users');
@@ -137,37 +106,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
     
     setUserProfile(profile);
-  };
-
-  // Register function with username (automatically generates @insaat.local email)
-  const register = async (username: string, password: string, displayName: string, role: UserRole = 'worker'): Promise<void> => {
-    // Generate email from username
-    const email = `${username.toLowerCase()}@insaat.local`;
-    
-    // Skip pre-check for username availability - Firebase Auth will reject duplicate emails
-    // The email is derived from username, so if username is taken, email will also be taken
-    // This avoids permission issues with unauthenticated Firestore queries
-    
-    // Create the auth user first
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    
-    try {
-      // Update display name in Firebase Auth
-      await updateProfile(userCredential.user, { displayName });
-      
-      // Create user profile in Firestore with username and isActive: true
-      const profile = await createUserProfile(userCredential.user, displayName, username, role);
-      setUserProfile(profile);
-    } catch (profileError: any) {
-      // If profile creation fails, delete the auth user to keep things consistent
-      console.error('Profile creation failed:', profileError);
-      try {
-        await userCredential.user.delete();
-      } catch (deleteError) {
-        console.error('Failed to cleanup auth user:', deleteError);
-      }
-      throw profileError;
-    }
   };
 
   // Logout function
@@ -212,6 +150,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Email update removed - username-only system
+
+  // Update password when mustChangePassword is true (no re-auth needed, user just logged in)
+  const updatePasswordForced = async (newPassword: string): Promise<void> => {
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+    await firebaseUpdatePassword(currentUser, newPassword);
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    await updateDoc(userDocRef, { mustChangePassword: false });
+    const profile = await fetchUserProfile(currentUser);
+    setUserProfile(profile);
+  };
 
   // Update user password (requires re-authentication)
   const updateUserPassword = async (currentPassword: string, newPassword: string): Promise<void> => {
@@ -289,13 +239,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userProfile,
     loading,
     login,
-    register,
     logout,
     isAdmin: userProfile?.role === 'admin',
     // Profile management functions
     checkUsernameAvailable,
     updateUserProfile,
     updateUserPassword,
+    updatePasswordForced,
     // Admin functions
     getAllUsers,
     updateUserRole,
