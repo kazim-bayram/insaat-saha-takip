@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import {
   ChevronDown,
   ChevronUp,
@@ -16,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotes } from '../hooks/useNotes';
 import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate } from '../types';
 import AddNoteModal from '../components/AddNoteModal';
+import NoteDetailModal from '../components/NoteDetailModal';
 import UserProfileMenu from '../components/UserProfileMenu';
 import ProfileSettings from '../components/ProfileSettings';
 import UserManagement from '../components/UserManagement';
@@ -33,12 +35,15 @@ const TablePage: React.FC = () => {
     error,
     updateNote,
     deleteNote,
+    addComment,
+    deleteComment,
     canEditNote,
     canDeleteNote
   } = useNotes();
 
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [filterDate, setFilterDate] = useState<string>('');
   const [filters, setFilters] = useState({
     project: '',
     adaParsel: '',
@@ -47,6 +52,8 @@ const TablePage: React.FC = () => {
     status: ''
   });
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
@@ -61,9 +68,10 @@ const TablePage: React.FC = () => {
       const progressMatch = !filters.progress || (note.progressLevel || '').toLowerCase().includes(filters.progress.toLowerCase());
       const noteStatus = normalizeStatus(note.status);
       const statusMatch = !filters.status || noteStatus === filters.status;
-      return projectMatch && adaParselMatch && categoryMatch && progressMatch && statusMatch;
+      const dateMatch = !filterDate || getWorkDate(note) === filterDate;
+      return projectMatch && adaParselMatch && categoryMatch && progressMatch && statusMatch && dateMatch;
     });
-  }, [notes, filters]);
+  }, [notes, filters, filterDate]);
 
   // Sort filtered notes
   const displayNotes = useMemo(() => {
@@ -99,33 +107,22 @@ const TablePage: React.FC = () => {
     }
   };
 
-  const exportToCSV = useCallback(() => {
-    const BOM = '\uFEFF';
+  const handleExport = useCallback(() => {
     const getStatusLabel = (s: string) => NOTE_STATUS_CONFIG[normalizeStatus(s)]?.label || 'Eksik';
-    const escape = (v: string) => {
-      if (v == null || v === '') return '';
-      const str = String(v).replace(/"/g, '""');
-      return `"${str}"`;
-    };
-    const headers = ['Proje İsmi', 'Ada/Parsel', 'Kategori', 'Hakediş', 'Yapılan Tarih', 'Durum'];
-    const rows = displayNotes.map(note => {
-      const row = {
-        'Proje İsmi': note.projectName || '',
-        'Ada/Parsel': `${note.ada || '-'}/${note.parsel || '-'}`,
-        'Kategori': note.category || '',
-        'Hakediş': note.progressLevel || '',
-        'Yapılan Tarih': formatWorkDate(getWorkDate(note)),
-        'Durum': getStatusLabel(note.status)
-      };
-      return headers.map(h => escape(row[h as keyof typeof row])).join(',');
-    });
-    const csvContent = headers.join(',') + '\n' + rows.join('\n');
-    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `saha-takip-rapor-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    const data = displayNotes.map(note => ({
+      'Proje': note.projectName || '',
+      'Kategori': note.category || '',
+      'Ada/Parsel': `${note.ada || '-'}/${note.parsel || '-'}`,
+      'Hakediş': note.progressLevel || '',
+      'Durum': getStatusLabel(note.status),
+      'Tarih': formatWorkDate(getWorkDate(note)),
+      'İçerik': (note.content || '').length > 500 ? (note.content || '').slice(0, 500) + '...' : (note.content || ''),
+      'Yazan': note.userName || note.userEmail || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Saha Raporu');
+    XLSX.writeFile(wb, 'Saha_Takip_Raporu.xlsx');
   }, [displayNotes]);
 
   const handleEditNote = (note: Note) => {
@@ -185,14 +182,14 @@ const TablePage: React.FC = () => {
                   </h1>
                   <p className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
                     {displayNotes.length} not
-                    {filters.project || filters.adaParsel || filters.category || filters.progress || filters.status ? ` (filtrelenmiş)` : ''}
+                    {filters.project || filters.adaParsel || filters.category || filters.progress || filters.status || filterDate ? ` (filtrelenmiş)` : ''}
                   </p>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={exportToCSV}
+                onClick={handleExport}
                 disabled={displayNotes.length === 0}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   isDark
@@ -307,7 +304,14 @@ const TablePage: React.FC = () => {
                       className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
                     />
                   </th>
-                  <th className="py-1 px-2 border-r border-gray-600/50" />
+                  <th className="py-1 px-2 border-r border-gray-600/50">
+                    <input
+                      type="date"
+                      value={filterDate}
+                      onChange={e => setFilterDate(e.target.value)}
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                    />
+                  </th>
                   <th className="py-1 px-2 border-r border-gray-600/50">
                     <select
                       value={filters.status}
@@ -347,8 +351,14 @@ const TablePage: React.FC = () => {
                       <td className={`py-2 px-3 font-mono whitespace-nowrap ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>
                         {idx + 1}
                       </td>
-                      <td className={`sticky left-0 z-[5] py-2 px-3 border-r whitespace-nowrap ${stickyBg} ${isDark ? 'border-slate-700/50 text-white shadow-[4px_0_6px_-2px_rgba(0,0,0,0.2)]' : 'border-gray-200 text-gray-900 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]'}`}>
-                        {note.projectName || '-'}
+                      <td className={`sticky left-0 z-[5] py-2 px-3 border-r whitespace-nowrap ${stickyBg} ${isDark ? 'border-slate-700/50 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.2)]' : 'border-gray-200 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]'}`}>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedNote(note); setIsDetailModalOpen(true); }}
+                          className={`text-left w-full text-blue-500 hover:text-blue-400 hover:underline cursor-pointer focus:outline-none focus:ring-0 ${isDark ? 'text-blue-400 hover:text-blue-300' : ''}`}
+                        >
+                          {note.projectName || '-'}
+                        </button>
                       </td>
                       <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
                         {note.ada || '-'} / {note.parsel || '-'}
@@ -408,6 +418,15 @@ const TablePage: React.FC = () => {
       </main>
 
       {/* Modals */}
+      <NoteDetailModal
+        note={selectedNote}
+        isOpen={isDetailModalOpen}
+        onClose={() => { setSelectedNote(null); setIsDetailModalOpen(false); }}
+        onAddComment={addComment}
+        onDeleteComment={deleteComment}
+        onEdit={handleEditNote}
+        canEdit={selectedNote ? canEditNote(selectedNote) : false}
+      />
       <AddNoteModal
         isOpen={showAddModal}
         onClose={() => { setShowAddModal(false); setEditingNote(null); }}
