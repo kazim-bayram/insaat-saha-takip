@@ -9,7 +9,6 @@ import {
   List,
   FileText,
   ChevronDown,
-  ChevronUp,
   Sun,
   Moon,
   Download,
@@ -20,7 +19,8 @@ import {
   Search,
   MapPin,
   RotateCcw,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Tag
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -76,6 +76,7 @@ const Dashboard: React.FC = () => {
     projectName: '',
     ada: '',
     parsel: '',
+    progressLevel: '',
     status: '',
     dateFrom: '',
     dateTo: ''
@@ -212,6 +213,7 @@ const Dashboard: React.FC = () => {
       projectName: '',
       ada: '',
       parsel: '',
+      progressLevel: '',
       status: '',
       dateFrom: '',
       dateTo: ''
@@ -219,7 +221,7 @@ const Dashboard: React.FC = () => {
   };
 
   const hasActiveFilters = filters.searchQuery || filters.workerEmail || filters.projectName || 
-                            filters.ada || filters.parsel || filters.status || filters.dateFrom || filters.dateTo;
+                            filters.ada || filters.parsel || filters.progressLevel || filters.status || filters.dateFrom || filters.dateTo;
 
   const handleLogout = async () => {
     try {
@@ -381,6 +383,27 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Hakediş / Seviye */}
+                <div>
+                  <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                    Hakediş / Seviye
+                  </label>
+                  <div className="relative">
+                    <Tag className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                    <input
+                      type="text"
+                      value={filters.progressLevel}
+                      onChange={(e) => setFilters({ ...filters, progressLevel: e.target.value })}
+                      placeholder="Örn: %50, Zemin Kat"
+                      className={`w-full rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-safety-orange transition-colors ${
+                        isDark 
+                          ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500' 
+                          : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 shadow-sm'
+                      }`}
+                    />
+                  </div>
+                </div>
+
                 {/* Project Dropdown */}
                 <div>
                   <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
@@ -495,21 +518,6 @@ const Dashboard: React.FC = () => {
                     Sıfırla
                   </button>
                 </div>
-
-                {/* Close Button */}
-                <div className="flex items-end">
-                  <button
-                    onClick={() => setIsFiltersOpen(false)}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isDark 
-                        ? 'bg-slate-800 text-concrete-300 hover:text-white border border-slate-600' 
-                        : 'bg-white text-gray-600 hover:text-gray-800 border border-gray-300 shadow-sm'
-                    }`}
-                  >
-                    <ChevronUp className="w-4 h-4" />
-                    Kapat
-                  </button>
-                </div>
               </div>
 
               {/* Active Filters Summary */}
@@ -536,6 +544,14 @@ const Dashboard: React.FC = () => {
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
                       Parsel: {filters.parsel}
                       <button onClick={() => setFilters({ ...filters, parsel: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filters.progressLevel && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      Hakediş: {filters.progressLevel}
+                      <button onClick={() => setFilters({ ...filters, progressLevel: '' })} className="hover:text-red-400 ml-1">
                         <X className="w-3 h-3" />
                       </button>
                     </span>

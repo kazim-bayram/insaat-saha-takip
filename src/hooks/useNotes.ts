@@ -298,6 +298,14 @@ export const useNotes = () => {
         }
       }
 
+      // Filter by progress level (Hakediş / Seviye) - partial match, case-insensitive
+      if (filters.progressLevel) {
+        const noteProgress = (note.progressLevel || '').toLowerCase();
+        if (!noteProgress.includes(filters.progressLevel.toLowerCase())) {
+          return false;
+        }
+      }
+
       // Filter by status (Eksik / Onay)
       if (filters.status) {
         const noteStatus = normalizeStatus(note.status);

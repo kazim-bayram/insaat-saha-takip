@@ -100,10 +100,21 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     setCustomFields(customFields.filter((_, i) => i !== index));
   };
 
+  const MAX_IMAGES = 4;
+
   // Handle multiple image selection
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    const currentCount = imagePreviews.length + existingImages.length;
+
+    // Reject all if adding these would exceed the limit
+    if (currentCount + files.length > MAX_IMAGES) {
+      setError('En fazla 4 fotoğraf yükleyebilirsiniz.');
+      e.target.value = '';
+      return;
+    }
 
     const newPreviews: ImagePreview[] = [];
     const errors: string[] = [];
@@ -118,12 +129,6 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       // Dosya boyutu kontrolü (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
         errors.push(`${file.name}: 10MB'dan büyük`);
-        return;
-      }
-
-      // Check total limit (max 10 images)
-      if (imagePreviews.length + existingImages.length + newPreviews.length >= 10) {
-        errors.push('En fazla 10 resim yüklenebilir');
         return;
       }
 
@@ -298,6 +303,13 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                 </div>
               )}
 
+              {/* Image counter */}
+              {totalImages > 0 && (
+                <p className={`text-xs mb-2 font-medium ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                  {totalImages}/4 fotoğraf
+                </p>
+              )}
+
               {/* Image Grid Preview */}
               {totalImages > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-3">
@@ -349,7 +361,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                   ))}
                   
                   {/* Add more button (if under limit) */}
-                  {totalImages < 10 && (
+                  {totalImages < MAX_IMAGES && (
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -432,7 +444,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
               {/* Resim Bilgisi */}
               <p className={`text-xs mt-2 flex items-center gap-1 ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
                 <ImageIcon className="w-3.5 h-3.5" />
-                Birden fazla fotoğraf seçebilirsiniz (max 10, her biri max 10MB)
+                Birden fazla fotoğraf seçebilirsiniz (max 4, her biri max 10MB)
               </p>
             </div>
 

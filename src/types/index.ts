@@ -136,6 +136,7 @@ export interface FilterOptions {
   projectName: string;
   ada: string;
   parsel: string;
+  progressLevel: string;  // Hakediş / Seviye filter
   status: string;  // '' | 'Eksik' | 'Onay'
   dateFrom: string;
   dateTo: string;
