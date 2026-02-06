@@ -13,7 +13,7 @@ import {
   Layers
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { NoteFormData, Note, CustomField, UploadProgress, getNoteImages } from '../types';
+import { NoteFormData, Note, NoteStatus, CustomField, UploadProgress, getNoteImages, normalizeStatus } from '../types';
 
 interface ImagePreview {
   file: File;
@@ -36,11 +36,12 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   uploadProgress
 }) => {
   const { isDark } = useTheme();
-  const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [projectName, setProjectName] = useState('');
   const [ada, setAda] = useState('');
   const [parsel, setParsel] = useState('');
+  const [progressLevel, setProgressLevel] = useState('');
+  const [status, setStatus] = useState<NoteStatus>('Eksik');
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   // Multi-image state
   const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
@@ -54,11 +55,12 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   // Düzenleme modunda formu doldur
   useEffect(() => {
     if (editNote) {
-      setTitle(editNote.title);
       setContent(editNote.content);
       setProjectName(editNote.projectName);
       setAda(editNote.ada || '');
       setParsel(editNote.parsel || '');
+      setProgressLevel(editNote.progressLevel || '');
+      setStatus(normalizeStatus(editNote.status));
       setCustomFields(editNote.customFields || []);
       // Load existing images with backward compatibility
       const images = getNoteImages(editNote);
@@ -69,11 +71,12 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   }, [editNote, isOpen]);
 
   const resetForm = () => {
-    setTitle('');
     setContent('');
     setProjectName('');
     setAda('');
     setParsel('');
+    setProgressLevel('');
+    setStatus('Eksik');
     setCustomFields([]);
     // Clean up preview URLs
     imagePreviews.forEach(preview => URL.revokeObjectURL(preview.previewUrl));
@@ -161,11 +164,6 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     setError(null);
 
     // Doğrulama
-    if (!title.trim()) {
-      setError('Lütfen bir başlık girin');
-      return;
-    }
-
     if (!projectName.trim()) {
       setError('Lütfen bir proje adı girin');
       return;
@@ -183,11 +181,12 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       const imageFiles = imagePreviews.map(preview => preview.file);
 
       await onSubmit({
-        title: title.trim(),
         content: content.trim(),
         projectName: projectName.trim(),
         ada: ada.trim(),
         parsel: parsel.trim(),
+        progressLevel: progressLevel.trim(),
+        status,
         customFields: filteredCustomFields,
         images: imageFiles
       }, existingImages.length > 0 ? existingImages : undefined);
@@ -437,25 +436,6 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
               </p>
             </div>
 
-            {/* Başlık Girişi */}
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
-                Başlık *
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Örn: 3. Katta beton çatlağı"
-                className={`w-full rounded-xl px-4 py-4 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
-                  isDark 
-                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
-                    : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
-                }`}
-                required
-              />
-            </div>
-
             {/* Proje Adı Girişi */}
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
@@ -510,6 +490,61 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                     }`}
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Hakediş / Seviye */}
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Hakediş / Seviye
+              </label>
+              <input
+                type="text"
+                value={progressLevel}
+                onChange={(e) => setProgressLevel(e.target.value)}
+                placeholder="Örn: %50, Zemin Kat, 3. Kademe"
+                className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                  isDark 
+                    ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange' 
+                    : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                }`}
+              />
+            </div>
+
+            {/* Durum Seçimi (Eksik / Onay) */}
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                Durum *
+              </label>
+              <div className={`grid grid-cols-2 gap-2 p-1 rounded-xl ${isDark ? 'bg-slate-900/50' : 'bg-gray-100'}`}>
+                <button
+                  type="button"
+                  onClick={() => setStatus('Eksik')}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
+                    status === 'Eksik'
+                      ? 'bg-red-500 text-white shadow-md'
+                      : isDark
+                        ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+                  }`}
+                >
+                  <span>🔴</span>
+                  Eksik
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatus('Onay')}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
+                    status === 'Onay'
+                      ? 'bg-green-500 text-white shadow-md'
+                      : isDark
+                        ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+                  }`}
+                >
+                  <span>🟢</span>
+                  Onay
+                </button>
               </div>
             </div>
 

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Calendar, 
-  FolderOpen, 
   User, 
   Trash2, 
   Edit3,
@@ -9,7 +8,6 @@ import {
   MapPin,
   ChevronDown,
   ChevronUp,
-  Clock,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -17,7 +15,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, normalizeStatus } from '../types';
 
 interface NoteCardProps {
   note: Note;
@@ -61,8 +59,8 @@ const NoteCard: React.FC<NoteCardProps> = ({
     minute: '2-digit'
   });
 
-  // Current status config
-  const currentStatus = note.status || 'open';
+  // Current status config (normalize legacy statuses)
+  const currentStatus = normalizeStatus(note.status);
   const statusConfig = NOTE_STATUS_CONFIG[currentStatus];
 
   // Get images array with backward compatibility
@@ -120,13 +118,10 @@ const NoteCard: React.FC<NoteCardProps> = ({
   // Get status icon
   const getStatusIcon = (status: NoteStatus) => {
     switch (status) {
-      case 'open':
-        return <Clock className="w-3.5 h-3.5" />;
-      case 'in_progress':
-        return <Loader2 className="w-3.5 h-3.5" />;
-      case 'resolved':
+      case 'Onay':
         return <CheckCircle2 className="w-3.5 h-3.5" />;
-      case 'rejected':
+      case 'Eksik':
+      default:
         return <XCircle className="w-3.5 h-3.5" />;
     }
   };
@@ -134,19 +129,9 @@ const NoteCard: React.FC<NoteCardProps> = ({
   // Border color based on status
   const getBorderClass = () => {
     if (isDark) {
-      switch (currentStatus) {
-        case 'in_progress': return 'border-blue-600/50';
-        case 'resolved': return 'border-green-600/50';
-        case 'rejected': return 'border-red-600/50';
-        default: return 'border-slate-700/50';
-      }
+      return currentStatus === 'Onay' ? 'border-green-600/50' : 'border-red-600/50';
     } else {
-      switch (currentStatus) {
-        case 'in_progress': return 'border-blue-300';
-        case 'resolved': return 'border-green-300';
-        case 'rejected': return 'border-red-300';
-        default: return 'border-gray-200';
-      }
+      return currentStatus === 'Onay' ? 'border-green-300' : 'border-red-300';
     }
   };
 
@@ -167,7 +152,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
             <div className="aspect-video">
               <img
                 src={images[0]}
-                alt={note.title}
+                alt={note.projectName || note.title || 'Not'}
                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
               />
@@ -181,7 +166,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
                 <img
                   key={idx}
                   src={url}
-                  alt={`${note.title} ${idx + 1}`}
+                    alt={`${note.projectName || note.title || 'Not'} ${idx + 1}`}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   loading="lazy"
                 />
@@ -194,20 +179,20 @@ const NoteCard: React.FC<NoteCardProps> = ({
             <div className="aspect-video grid grid-cols-2 grid-rows-2 gap-0.5">
               <img
                 src={images[0]}
-                alt={`${note.title} 1`}
+                alt={`${note.projectName || note.title || 'Not'} 1`}
                 className="w-full h-full object-cover row-span-2 transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
               />
               <img
                 src={images[1]}
-                alt={`${note.title} 2`}
+                    alt={`${note.projectName || note.title || 'Not'} 2`}
                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
               />
               <div className="relative">
                 <img
                   src={images[2]}
-                  alt={`${note.title} 3`}
+                    alt={`${note.projectName || note.title || 'Not'} 3`}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   loading="lazy"
                 />
@@ -343,11 +328,11 @@ const NoteCard: React.FC<NoteCardProps> = ({
 
       {/* İçerik Bölümü */}
       <div className="p-4">
-        {/* Başlık */}
-        <h3 className={`font-semibold text-lg mb-2 line-clamp-1 group-hover:text-safety-orange transition-colors ${
+        {/* Proje Adı (Ana Başlık) */}
+        <h3 className={`font-bold text-lg mb-2 line-clamp-1 group-hover:text-safety-orange transition-colors ${
           isDark ? 'text-white' : 'text-gray-900'
         }`}>
-          {note.title || 'Başlıksız Not'}
+          {note.projectName || note.title || 'Proje Belirtilmemiş'}
         </h3>
 
         {/* Ada/Parsel Bilgileri */}
@@ -372,6 +357,19 @@ const NoteCard: React.FC<NoteCardProps> = ({
                 Parsel: {note.parsel}
               </span>
             )}
+          </div>
+        )}
+
+        {/* Hakediş / Seviye */}
+        {note.progressLevel && (
+          <div className={`flex items-center gap-2 mb-2`}>
+            <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+              isDark 
+                ? 'bg-purple-600/20 text-purple-300' 
+                : 'bg-purple-100 text-purple-700'
+            }`}>
+              Hakediş: {note.progressLevel}
+            </span>
           </div>
         )}
 
@@ -403,12 +401,6 @@ const NoteCard: React.FC<NoteCardProps> = ({
 
         {/* Meta Bilgiler */}
         <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-xs ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
-          {/* Proje Adı */}
-          <div className="flex items-center gap-1.5">
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span className="truncate max-w-[120px]">{note.projectName || 'Proje Yok'}</span>
-          </div>
-
           {/* Tarih */}
           <div className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" />

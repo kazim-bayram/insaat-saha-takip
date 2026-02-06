@@ -13,8 +13,8 @@ import {
   Sun,
   Moon,
   Download,
-  Clock,
   CheckCircle2,
+  XCircle,
   Users,
   BarChart3,
   Search,
@@ -25,7 +25,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotes } from '../hooks/useNotes';
-import { Note, FilterOptions, NOTE_STATUS_CONFIG, NoteFormData, getNoteImages } from '../types';
+import { Note, FilterOptions, NOTE_STATUS_CONFIG, NoteFormData, getNoteImages, normalizeStatus } from '../types';
 import NoteCard from './NoteCard';
 import NoteDetailModal from './NoteDetailModal';
 import AddNoteModal from './AddNoteModal';
@@ -76,6 +76,7 @@ const Dashboard: React.FC = () => {
     projectName: '',
     ada: '',
     parsel: '',
+    status: '',
     dateFrom: '',
     dateTo: ''
   });
@@ -111,7 +112,8 @@ const Dashboard: React.FC = () => {
 
     // Map status to Turkish labels
     const getStatusLabel = (status: string) => {
-      return NOTE_STATUS_CONFIG[status as keyof typeof NOTE_STATUS_CONFIG]?.label || 'Beklemede';
+      const normalized = normalizeStatus(status);
+      return NOTE_STATUS_CONFIG[normalized]?.label || 'Eksik';
     };
 
     // Convert notes to CSV rows
@@ -139,7 +141,7 @@ const Dashboard: React.FC = () => {
         escapeCSV(note.parsel || ''),
         escapeCSV(note.userEmail || ''),
         escapeCSV(note.content || ''),
-        escapeCSV(getStatusLabel(note.status || 'open')),
+        escapeCSV(getStatusLabel(note.status)),
         escapeCSV(imageUrls)
       ].join(',');
     });
@@ -210,13 +212,14 @@ const Dashboard: React.FC = () => {
       projectName: '',
       ada: '',
       parsel: '',
+      status: '',
       dateFrom: '',
       dateTo: ''
     });
   };
 
   const hasActiveFilters = filters.searchQuery || filters.workerEmail || filters.projectName || 
-                            filters.ada || filters.parsel || filters.dateFrom || filters.dateTo;
+                            filters.ada || filters.parsel || filters.status || filters.dateFrom || filters.dateTo;
 
   const handleLogout = async () => {
     try {
@@ -324,7 +327,7 @@ const Dashboard: React.FC = () => {
                     type="text"
                     value={filters.searchQuery}
                     onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                    placeholder="Başlık veya içerikte ara..."
+                    placeholder="Proje adı veya içerikte ara..."
                     className={`w-full rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-safety-orange/20 focus:border-safety-orange transition-all ${
                       isDark 
                         ? 'bg-slate-800 border border-slate-600 text-white placeholder-concrete-500' 
@@ -398,6 +401,29 @@ const Dashboard: React.FC = () => {
                       {projectNames.map(name => (
                         <option key={name} value={name}>{name}</option>
                       ))}
+                    </select>
+                    <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
+                  </div>
+                </div>
+
+                {/* Status Dropdown (Eksik / Onay) */}
+                <div>
+                  <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                    Durum
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={filters.status}
+                      onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                      className={`w-full rounded-lg pl-3 pr-8 py-2.5 text-sm appearance-none focus:outline-none focus:border-safety-orange transition-colors ${
+                        isDark 
+                          ? 'bg-slate-800 border border-slate-600 text-white' 
+                          : 'bg-white border border-gray-300 text-gray-900 shadow-sm'
+                      }`}
+                    >
+                      <option value="">Tümü</option>
+                      <option value="Eksik">🔴 Eksik</option>
+                      <option value="Onay">🟢 Onay</option>
                     </select>
                     <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-concrete-500' : 'text-gray-400'}`} />
                   </div>
@@ -522,6 +548,14 @@ const Dashboard: React.FC = () => {
                       </button>
                     </span>
                   )}
+                  {filters.status && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
+                      {filters.status === 'Eksik' ? '🔴' : '🟢'} {filters.status}
+                      <button onClick={() => setFilters({ ...filters, status: '' })} className="hover:text-red-400 ml-1">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
                   {filters.workerEmail && (
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-gray-700 shadow-sm'}`}>
                       {workerNames.find(w => w.email === filters.workerEmail)?.name || filters.workerEmail}
@@ -571,28 +605,28 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Bekleyen Sorunlar */}
+            {/* Eksik (Missing) */}
             <div className={`rounded-xl p-4 border ${
               isDark 
                 ? 'bg-slate-850 border-slate-700/50' 
                 : 'bg-white border-gray-200 shadow-sm'
             }`}>
               <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-yellow-600/20' : 'bg-yellow-100'}`}>
-                  <Clock className={`w-5 h-5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                <div className={`p-2.5 rounded-lg ${isDark ? 'bg-red-600/20' : 'bg-red-100'}`}>
+                  <XCircle className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
                 </div>
                 <div>
                   <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                    Beklemede
+                    Eksik
                   </p>
-                  <p className={`text-2xl font-bold ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                    {kpiStats.pendingIssues}
+                  <p className={`text-2xl font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                    {kpiStats.eksikCount}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Çözülen Sorunlar */}
+            {/* Onay (Approved) */}
             <div className={`rounded-xl p-4 border ${
               isDark 
                 ? 'bg-slate-850 border-slate-700/50' 
@@ -604,10 +638,10 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div>
                   <p className={`text-xs font-medium ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
-                    Çözüldü
+                    Onay
                   </p>
                   <p className={`text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                    {kpiStats.resolvedIssues}
+                    {kpiStats.onayCount}
                   </p>
                 </div>
               </div>

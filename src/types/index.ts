@@ -2,12 +2,22 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'admin' | 'worker';
 
-// Note status workflow
-export type NoteStatus = 'open' | 'in_progress' | 'resolved' | 'rejected';
+// Note status workflow (QA/QC approval)
+export type NoteStatus = 'Eksik' | 'Onay';
+
+// Legacy status types for backward compatibility
+export type LegacyNoteStatus = 'open' | 'in_progress' | 'resolved' | 'rejected';
+
+// Normalize legacy statuses to new Eksik/Onay system
+export const normalizeStatus = (status: string | undefined): NoteStatus => {
+  if (status === 'Onay' || status === 'resolved') return 'Onay';
+  return 'Eksik'; // Default: open, in_progress, rejected, undefined → Eksik
+};
 
 export interface StatusConfig {
   key: NoteStatus;
   label: string;
+  emoji: string;
   color: string;
   bgLight: string;
   bgDark: string;
@@ -18,42 +28,10 @@ export interface StatusConfig {
 }
 
 export const NOTE_STATUS_CONFIG: Record<NoteStatus, StatusConfig> = {
-  open: {
-    key: 'open',
-    label: 'Beklemede',
-    color: 'gray',
-    bgLight: 'bg-gray-100',
-    bgDark: 'bg-gray-600/20',
-    textLight: 'text-gray-700',
-    textDark: 'text-gray-300',
-    borderLight: 'border-gray-300',
-    borderDark: 'border-gray-600'
-  },
-  in_progress: {
-    key: 'in_progress',
-    label: 'İşlemde',
-    color: 'blue',
-    bgLight: 'bg-blue-100',
-    bgDark: 'bg-blue-600/20',
-    textLight: 'text-blue-700',
-    textDark: 'text-blue-300',
-    borderLight: 'border-blue-300',
-    borderDark: 'border-blue-600'
-  },
-  resolved: {
-    key: 'resolved',
-    label: 'Çözüldü',
-    color: 'green',
-    bgLight: 'bg-green-100',
-    bgDark: 'bg-green-600/20',
-    textLight: 'text-green-700',
-    textDark: 'text-green-300',
-    borderLight: 'border-green-300',
-    borderDark: 'border-green-600'
-  },
-  rejected: {
-    key: 'rejected',
-    label: 'Reddedildi',
+  Eksik: {
+    key: 'Eksik',
+    label: 'Eksik',
+    emoji: '🔴',
     color: 'red',
     bgLight: 'bg-red-100',
     bgDark: 'bg-red-600/20',
@@ -61,6 +39,18 @@ export const NOTE_STATUS_CONFIG: Record<NoteStatus, StatusConfig> = {
     textDark: 'text-red-300',
     borderLight: 'border-red-300',
     borderDark: 'border-red-600'
+  },
+  Onay: {
+    key: 'Onay',
+    label: 'Onay',
+    emoji: '🟢',
+    color: 'green',
+    bgLight: 'bg-green-100',
+    bgDark: 'bg-green-600/20',
+    textLight: 'text-green-700',
+    textDark: 'text-green-300',
+    borderLight: 'border-green-300',
+    borderDark: 'border-green-600'
   }
 };
 
@@ -90,14 +80,16 @@ export interface Note {
   imageUrls: string[];
   // Legacy single image field (for backward compatibility)
   imageUrl?: string;
-  title: string;
+  title?: string;  // Deprecated: kept for backward compatibility with legacy notes
   content: string;
   projectName: string;
   // Land surveying fields
   ada: string;      // Block
   parsel: string;   // Parcel
   customFields: CustomField[];  // Dynamic fields
-  // Status workflow
+  // Progress/Level tracking
+  progressLevel?: string;  // Hakediş / Seviye
+  // Status workflow (QA/QC: Eksik | Onay)
   status: NoteStatus;
   // Comments/Feedback system
   comments?: Comment[];
@@ -120,11 +112,12 @@ export const getNoteImages = (note: Note): string[] => {
 };
 
 export interface NoteFormData {
-  title: string;
   content: string;
   projectName: string;
   ada: string;
   parsel: string;
+  progressLevel: string;  // Hakediş / Seviye
+  status: NoteStatus;     // Eksik | Onay
   customFields: CustomField[];
   images: File[];  // Changed from single image to array
 }
@@ -142,6 +135,7 @@ export interface FilterOptions {
   projectName: string;
   ada: string;
   parsel: string;
+  status: string;  // '' | 'Eksik' | 'Onay'
   dateFrom: string;
   dateTo: string;
 }

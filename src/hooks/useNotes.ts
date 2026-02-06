@@ -19,7 +19,7 @@ import {
   deleteObject
 } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
-import { Note, NoteFormData, FilterOptions, NoteStatus, UploadProgress, Comment } from '../types';
+import { Note, NoteFormData, FilterOptions, NoteStatus, UploadProgress, Comment, normalizeStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 // Generate unique ID for comments
@@ -151,13 +151,13 @@ export const useNotes = () => {
         userName: userProfile.displayName || '',
         userRole: userProfile.role || 'worker',  // Track who created the note
         imageUrls,  // New array field
-        title: formData.title || '',
         content: formData.content || '',
         projectName: formData.projectName || '',
         ada: formData.ada || '',
         parsel: formData.parsel || '',
+        progressLevel: formData.progressLevel || '',
         customFields: formData.customFields || [],
-        status: 'open' as NoteStatus,  // Default status
+        status: formData.status || ('Eksik' as NoteStatus),  // QA/QC status
         createdAt: Timestamp.now()
       };
 
@@ -197,11 +197,12 @@ export const useNotes = () => {
       };
 
       // Only add fields that are defined
-      if (formData.title !== undefined) sanitizedData.title = formData.title || '';
       if (formData.content !== undefined) sanitizedData.content = formData.content || '';
       if (formData.projectName !== undefined) sanitizedData.projectName = formData.projectName || '';
       if (formData.ada !== undefined) sanitizedData.ada = formData.ada || '';
       if (formData.parsel !== undefined) sanitizedData.parsel = formData.parsel || '';
+      if (formData.progressLevel !== undefined) sanitizedData.progressLevel = formData.progressLevel || '';
+      if (formData.status !== undefined) sanitizedData.status = formData.status;
       if (formData.customFields !== undefined) sanitizedData.customFields = formData.customFields || [];
 
       // Handle images
@@ -261,12 +262,12 @@ export const useNotes = () => {
   // Filter notes (client-side for admin dashboard)
   const filterNotes = useCallback((filters: FilterOptions): Note[] => {
     return notes.filter((note) => {
-      // Search filter - check title and content (case-insensitive)
+      // Search filter - check project name and content (case-insensitive)
       if (filters.searchQuery) {
         const searchLower = filters.searchQuery.toLowerCase();
-        const titleMatch = (note.title || '').toLowerCase().includes(searchLower);
+        const projectMatch = (note.projectName || '').toLowerCase().includes(searchLower);
         const contentMatch = (note.content || '').toLowerCase().includes(searchLower);
-        if (!titleMatch && !contentMatch) {
+        if (!projectMatch && !contentMatch) {
           return false;
         }
       }
@@ -293,6 +294,14 @@ export const useNotes = () => {
       if (filters.parsel) {
         const noteParsel = (note.parsel || '').toLowerCase();
         if (!noteParsel.includes(filters.parsel.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Filter by status (Eksik / Onay)
+      if (filters.status) {
+        const noteStatus = normalizeStatus(note.status);
+        if (noteStatus !== filters.status) {
           return false;
         }
       }
@@ -379,14 +388,14 @@ export const useNotes = () => {
   // Get KPI statistics
   const getKPIStats = useCallback(() => {
     const totalNotes = notes.length;
-    const pendingIssues = notes.filter(note => (note.status || 'open') === 'open').length;
-    const resolvedIssues = notes.filter(note => note.status === 'resolved').length;
+    const eksikCount = notes.filter(note => normalizeStatus(note.status) === 'Eksik').length;
+    const onayCount = notes.filter(note => normalizeStatus(note.status) === 'Onay').length;
     const activeWorkers = new Set(notes.map(note => note.userId)).size;
 
     return {
       totalNotes,
-      pendingIssues,
-      resolvedIssues,
+      eksikCount,
+      onayCount,
       activeWorkers
     };
   }, [notes]);

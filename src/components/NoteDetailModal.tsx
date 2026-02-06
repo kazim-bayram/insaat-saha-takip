@@ -10,7 +10,6 @@ import {
   ImageIcon,
   MapPin,
   Tag,
-  Clock,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -26,7 +25,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment, normalizeStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 interface NoteDetailModalProps {
@@ -63,20 +62,17 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
   // Get images array with backward compatibility
   const images = getNoteImages(note);
 
-  // Status config
-  const currentStatus = note.status || 'open';
+  // Status config (normalize legacy statuses)
+  const currentStatus = normalizeStatus(note.status);
   const statusConfig = NOTE_STATUS_CONFIG[currentStatus];
 
   // Get status icon
   const getStatusIcon = (status: NoteStatus) => {
     switch (status) {
-      case 'open':
-        return <Clock className="w-4 h-4" />;
-      case 'in_progress':
-        return <Loader2 className="w-4 h-4" />;
-      case 'resolved':
+      case 'Onay':
         return <CheckCircle2 className="w-4 h-4" />;
-      case 'rejected':
+      case 'Eksik':
+      default:
         return <XCircle className="w-4 h-4" />;
     }
   };
@@ -186,8 +182,8 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
           isDark ? 'border-slate-700/50' : 'border-gray-200'
         }`}>
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <h2 className={`text-xl font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {note.title || 'Başlıksız Not'}
+            <h2 className={`text-xl font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {note.projectName || note.title || 'Proje Belirtilmemiş'}
             </h2>
             {/* Status Badge */}
             <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
@@ -241,7 +237,7 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
                   >
                     <img
                       src={images[selectedImageIndex]}
-                      alt={`${note.title} ${selectedImageIndex + 1}`}
+                      alt={`${note.projectName || note.title || 'Not'} ${selectedImageIndex + 1}`}
                       className="w-full h-auto max-h-[400px] object-contain"
                     />
                     
@@ -362,6 +358,21 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
                         </span>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Hakediş / Seviye */}
+              {note.progressLevel && (
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-lg ${isDark ? 'bg-purple-600/10' : 'bg-purple-50'}`}>
+                    <Tag className={`w-5 h-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                  </div>
+                  <div>
+                    <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Hakediş / Seviye</p>
+                    <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {note.progressLevel}
+                    </p>
                   </div>
                 </div>
               )}
@@ -604,7 +615,7 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
           {/* Main Image */}
           <img
             src={images[selectedImageIndex]}
-            alt={`${note.title} ${selectedImageIndex + 1}`}
+            alt={`${note.projectName || note.title || 'Not'} ${selectedImageIndex + 1}`}
             className="max-w-[90vw] max-h-[90vh] object-contain"
             onClick={(e) => e.stopPropagation()}
           />
