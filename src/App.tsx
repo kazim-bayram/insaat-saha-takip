@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import TablePage from './pages/TablePage';
 import LoadingSpinner from './components/LoadingSpinner';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import { CheckCircle2 } from 'lucide-react';
@@ -43,7 +45,10 @@ const App: React.FC = () => {
   // Ana panel
   return (
     <>
-      <Dashboard />
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/table-view" element={<TablePage />} />
+      </Routes>
       {/* Toast: Şifre değiştirildi */}
       {showPasswordChangeToast && (
         <div className="fixed bottom-4 right-4 z-[110] flex items-center gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/30 shadow-lg animate-slide-up">
