@@ -25,8 +25,9 @@ import {
   Edit3
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment, normalizeStatus, getWorkDate, formatWorkDate } from '../types';
+import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment, normalizeStatus, getWorkDate, formatWorkDate, getNoteFieldValue } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useNoteSchema } from '../hooks/useNoteSchema';
 
 interface NoteDetailModalProps {
   note: Note | null;
@@ -49,6 +50,8 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
 }) => {
   const { isDark } = useTheme();
   const { currentUser, isAdmin } = useAuth();
+  const { schema } = useNoteSchema();
+  const schemaFields = [...schema.fields].sort((a, b) => a.order - b.order);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
   const [showComments, setShowComments] = useState(true);
@@ -328,55 +331,49 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Ada/Parsel Bilgileri */}
-              {(note.ada || note.parsel) && (
-                <div className="flex items-start gap-3">
-                  <div className={`p-2 rounded-lg ${isDark ? 'bg-emerald-600/10' : 'bg-emerald-50'}`}>
-                    <MapPin className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
-                  </div>
-                  <div>
-                    <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Arazi Bilgileri</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      {note.ada && (
-                        <span className={`text-sm px-3 py-1 rounded-full font-medium ${
-                          isDark 
-                            ? 'bg-safety-orange/20 text-safety-orange' 
-                            : 'bg-orange-100 text-orange-700'
-                        }`}>
-                          Ada: {note.ada}
-                        </span>
-                      )}
-                      {note.parsel && (
-                        <span className={`text-sm px-3 py-1 rounded-full font-medium ${
-                          isDark 
-                            ? 'bg-steel-600/20 text-steel-300' 
-                            : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          Parsel: {note.parsel}
-                        </span>
-                      )}
+              {/* Schema-driven dynamic fields */}
+              {schemaFields.length > 0 && (() => {
+                const hasValue = (v: any) =>
+                  v !== undefined && v !== null &&
+                  (typeof v === 'boolean' ? v : typeof v === 'string' ? v.trim() !== '' : Array.isArray(v) ? v.length > 0 : true);
+                const withValues = schemaFields.filter((f) => hasValue(getNoteFieldValue(note, f.id)));
+                if (withValues.length === 0) return null;
+                const formatVal = (val: any, type: string) => {
+                  if (val === undefined || val === null) return '';
+                  if (type === 'date' && val) return formatWorkDate(String(val));
+                  if (typeof val === 'boolean') return val ? 'Evet' : 'Hayır';
+                  if (Array.isArray(val)) return val.join(', ');
+                  return String(val);
+                };
+                return (
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-purple-600/10' : 'bg-purple-50'}`}>
+                      <Tag className={`w-5 h-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                    </div>
+                    <div className="flex-1">
+                      <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Form Alanları</p>
+                      <div className={`mt-2 rounded-lg p-3 ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'}`}>
+                        <div className="space-y-2">
+                          {withValues.map((field) => {
+                            const val = getNoteFieldValue(note, field.id);
+                            const displayVal = formatVal(val, field.type);
+                            if (!displayVal) return null;
+                            return (
+                              <div key={field.id} className="flex items-center justify-between">
+                                <span className={`text-sm font-medium ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>{field.label}</span>
+                                <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{displayVal}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {/* Hakediş / Seviye */}
-              {note.progressLevel && (
-                <div className="flex items-start gap-3">
-                  <div className={`p-2 rounded-lg ${isDark ? 'bg-purple-600/10' : 'bg-purple-50'}`}>
-                    <Tag className={`w-5 h-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                  </div>
-                  <div>
-                    <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Hakediş / Seviye</p>
-                    <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {note.progressLevel}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Özel Alanlar */}
-              {note.customFields && note.customFields.length > 0 && (
+              {/* Legacy custom fields (fallback) */}
+              {schemaFields.length === 0 && note.customFields && note.customFields.length > 0 && (
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-lg ${isDark ? 'bg-purple-600/10' : 'bg-purple-50'}`}>
                     <Tag className={`w-5 h-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -387,12 +384,8 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
                       <div className="space-y-2">
                         {note.customFields.map((field, index) => (
                           <div key={index} className="flex items-center justify-between">
-                            <span className={`text-sm font-medium ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>
-                              {field.label}
-                            </span>
-                            <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {field.value}
-                            </span>
+                            <span className={`text-sm font-medium ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>{field.label}</span>
+                            <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{field.value}</span>
                           </div>
                         ))}
                       </div>

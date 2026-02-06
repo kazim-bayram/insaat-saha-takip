@@ -65,10 +65,30 @@ export interface UserProfile {
   mustChangePassword?: boolean; // Force password change on first login
 }
 
-// Custom field for dynamic key-value pairs
+// Custom field for dynamic key-value pairs (legacy)
 export interface CustomField {
   label: string;
   value: string;
+}
+
+// --- Dynamic Schema System (Admin-configurable form builder) ---
+
+export type FormFieldType = 'text' | 'number' | 'date' | 'select' | 'multiselect' | 'textarea' | 'checkbox';
+
+export interface FormField {
+  id: string;             // Unique key (e.g., "concrete_temp")
+  label: string;          // Display label (e.g., "Beton Sıcaklığı")
+  type: FormFieldType;
+  required: boolean;
+  options?: string[];     // For 'select' and 'multiselect' types
+  order: number;
+  placeholder?: string;   // Helper text inside inputs
+  description?: string;   // Small info text below the input
+}
+
+export interface NoteSchema {
+  fields: FormField[];
+  version: number;
 }
 
 export interface Note {
@@ -84,21 +104,22 @@ export interface Note {
   title?: string;  // Deprecated: kept for backward compatibility with legacy notes
   content: string;
   projectName: string;
-  category?: string;  // Kategori (e.g., Kaba İşler, Elektrik) - optional for legacy notes
-  date?: string;      // Work date YYYY-MM-DD (Yapılan Tarih) - optional for legacy notes
-  // Land surveying fields
-  ada: string;      // Block
-  parsel: string;   // Parcel
-  customFields: CustomField[];  // Dynamic fields
-  // Progress/Level tracking
-  progressLevel?: string;  // Hakediş / Seviye
+  // --- Legacy flat fields (backward compatibility; prefer data for new notes) ---
+  category?: string;
+  date?: string;
+  ada?: string;
+  parsel?: string;
+  customFields?: CustomField[];
+  progressLevel?: string;
+  // --- New schema-driven dynamic data bag ---
+  /** Stores values keyed by FormField.id (schema-driven notes) */
+  data?: Record<string, any>;
   // Status workflow (QA/QC: Eksik | Onay)
   status: NoteStatus;
   // Comments/Feedback system
   comments?: Comment[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
-  // Track who last edited (for notifications)
   lastEditedBy?: string;
   lastEditedByName?: string;
 }
@@ -117,14 +138,26 @@ export const getNoteImages = (note: Note): string[] => {
 export interface NoteFormData {
   content: string;
   projectName: string;
-  category: string;       // Kategori (required)
-  date: string;           // Work date YYYY-MM-DD (required)
-  ada: string;
-  parsel: string;
-  progressLevel: string;  // Hakediş / Seviye
+  category?: string;       // Legacy
+  date?: string;           // Legacy
+  ada?: string;
+  parsel?: string;
+  progressLevel?: string;
   status: NoteStatus;     // Eksik | Onay
-  customFields: CustomField[];
-  images: File[];  // Changed from single image to array
+  customFields?: CustomField[];
+  images: File[];
+  /** Schema-driven dynamic field values (keyed by FormField.id) */
+  data?: Record<string, any>;
+}
+
+/** Schema-driven form data: core + dynamic data bag */
+export interface NoteFormDataDynamic {
+  content: string;
+  projectName: string;
+  status: NoteStatus;
+  images: File[];
+  /** Values keyed by FormField.id (schema fields) */
+  data: Record<string, any>;
 }
 
 // Suggested category options for AddNoteModal
@@ -154,6 +187,23 @@ export const formatWorkDate = (dateStr: string): string => {
   const [y, m, d] = dateStr.split('-');
   if (!y || !m || !d) return dateStr;
   return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y}`;
+};
+
+/** Get value for a schema field from a note (supports legacy flat fields) */
+export const getNoteFieldValue = (note: Note, fieldId: string): any => {
+  if (note.data && fieldId in note.data) {
+    return note.data[fieldId];
+  }
+  // Legacy mapping: schema field ids -> legacy flat fields
+  const legacyMap: Record<string, keyof Note> = {
+    category: 'category',
+    date: 'date',
+    ada: 'ada',
+    parsel: 'parsel',
+    progressLevel: 'progressLevel'
+  };
+  const key = legacyMap[fieldId] ?? fieldId;
+  return (note as any)[key];
 };
 
 // Upload progress tracking

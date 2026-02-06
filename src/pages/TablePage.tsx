@@ -9,13 +9,15 @@ import {
   Pencil,
   Trash2,
   ArrowLeft,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Settings2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotes } from '../hooks/useNotes';
-import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate } from '../types';
+import { useNoteSchema } from '../hooks/useNoteSchema';
+import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate, getNoteFieldValue } from '../types';
 import AddNoteModal from '../components/AddNoteModal';
 import NoteDetailModal from '../components/NoteDetailModal';
 import UserProfileMenu from '../components/UserProfileMenu';
@@ -29,6 +31,8 @@ type SortDir = 'asc' | 'desc';
 const TablePage: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
   const { logout, isAdmin } = useAuth();
+  const { schema } = useNoteSchema();
+  const schemaFields = [...schema.fields].sort((a, b) => a.order - b.order);
   const {
     notes,
     loading,
@@ -60,12 +64,14 @@ const TablePage: React.FC = () => {
 
   // Apply column filters (AND logic, case-insensitive)
   const filteredNotes = useMemo(() => {
-    return notes.filter(note => {
+    return notes.filter((note) => {
       const projectMatch = !filters.project || (note.projectName || '').toLowerCase().includes(filters.project.toLowerCase());
-      const adaParselStr = `${note.ada || ''}/${note.parsel || ''}`.toLowerCase();
+      const adaParselStr = `${getNoteFieldValue(note, 'ada') || ''}/${getNoteFieldValue(note, 'parsel') || ''}`.toLowerCase();
       const adaParselMatch = !filters.adaParsel || adaParselStr.includes(filters.adaParsel.toLowerCase());
-      const categoryMatch = !filters.category || (note.category || '').toLowerCase().includes(filters.category.toLowerCase());
-      const progressMatch = !filters.progress || (note.progressLevel || '').toLowerCase().includes(filters.progress.toLowerCase());
+      const categoryVal = String(getNoteFieldValue(note, 'category') || '');
+      const categoryMatch = !filters.category || categoryVal.toLowerCase().includes(filters.category.toLowerCase());
+      const progressVal = String(getNoteFieldValue(note, 'progressLevel') || '');
+      const progressMatch = !filters.progress || progressVal.toLowerCase().includes(filters.progress.toLowerCase());
       const noteStatus = normalizeStatus(note.status);
       const statusMatch = !filters.status || noteStatus === filters.status;
       const dateMatch = !filterDate || getWorkDate(note) === filterDate;
@@ -109,21 +115,37 @@ const TablePage: React.FC = () => {
 
   const handleExport = useCallback(() => {
     const getStatusLabel = (s: string) => NOTE_STATUS_CONFIG[normalizeStatus(s)]?.label || 'Eksik';
-    const data = displayNotes.map(note => ({
-      'Proje': note.projectName || '',
-      'Kategori': note.category || '',
-      'Ada/Parsel': `${note.ada || '-'}/${note.parsel || '-'}`,
-      'Hakediş': note.progressLevel || '',
-      'Durum': getStatusLabel(note.status),
-      'Tarih': formatWorkDate(getWorkDate(note)),
-      'İçerik': (note.content || '').length > 500 ? (note.content || '').slice(0, 500) + '...' : (note.content || ''),
-      'Yazan': note.userName || note.userEmail || ''
-    }));
+    const schemaCols = schemaFields.map((f) => f.label);
+    const allCols = ['Proje', ...schemaCols, 'Durum', 'Tarih', 'İçerik', 'Yazan'];
+    const data = displayNotes.map((note) => {
+      const row: Record<string, string> = {
+        'Proje': note.projectName || '',
+        'Durum': getStatusLabel(note.status),
+        'Tarih': formatWorkDate(getWorkDate(note)),
+        'İçerik': (note.content || '').length > 500 ? (note.content || '').slice(0, 500) + '...' : (note.content || ''),
+        'Yazan': note.userName || note.userEmail || ''
+      };
+      schemaFields.forEach((f) => {
+        const v = getNoteFieldValue(note, f.id);
+        let display = '';
+        if (v !== undefined && v !== null) {
+          if (f.type === 'date' && v) display = formatWorkDate(String(v));
+          else if (Array.isArray(v)) display = v.length > 0 ? v.join(', ') : '';
+          else if (typeof v === 'boolean') display = v ? 'Evet' : '';
+          else if (v !== '') display = String(v);
+        }
+        row[f.label] = display;
+      });
+      return allCols.reduce<Record<string, string>>((acc, col) => {
+        acc[col] = row[col] ?? '';
+        return acc;
+      }, {});
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Saha Raporu');
     XLSX.writeFile(wb, 'Saha_Takip_Raporu.xlsx');
-  }, [displayNotes]);
+  }, [displayNotes, schemaFields]);
 
   const handleEditNote = (note: Note) => {
     setEditingNote(note);
@@ -188,6 +210,20 @@ const TablePage: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {isAdmin && (
+                <Link
+                  to="/form-builder"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isDark
+                      ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                  title="Form Şeması"
+                >
+                  <Settings2 className="w-4 h-4" />
+                  Form Şeması
+                </Link>
+              )}
               <button
                 onClick={handleExport}
                 disabled={displayNotes.length === 0}
@@ -243,26 +279,27 @@ const TablePage: React.FC = () => {
                       {sortField === 'projectName' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                     </span>
                   </th>
-                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 font-mono whitespace-nowrap">Ada / Parsel</th>
-                  <th
-                    className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none whitespace-nowrap"
-                    onClick={() => handleSort('category')}
-                  >
-                    <span className="flex items-center gap-1">
-                      Kategori
-                      {sortField === 'category' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                    </span>
-                  </th>
-                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap">Hakediş / Seviye</th>
-                  <th
-                    className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none font-mono whitespace-nowrap"
-                    onClick={() => handleSort('date')}
-                  >
-                    <span className="flex items-center gap-1">
-                      Tarih
-                      {sortField === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                    </span>
-                  </th>
+                  {schemaFields.map((f) => (
+                    <th
+                      key={f.id}
+                      className={`py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap ${
+                        ['ada', 'parsel'].includes(f.id) ? 'font-mono' : ''
+                      }`}
+                    >
+                      {f.label}
+                    </th>
+                  ))}
+                  {!schemaFields.some((f) => f.id === 'date') && (
+                    <th
+                      className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none font-mono whitespace-nowrap"
+                      onClick={() => handleSort('date')}
+                    >
+                      <span className="flex items-center gap-1">
+                        Tarih
+                        {sortField === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                      </span>
+                    </th>
+                  )}
                   <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap">Durum</th>
                   <th className="py-2 px-3 text-left font-semibold w-24 whitespace-nowrap">İşlemler</th>
                 </tr>
@@ -272,50 +309,80 @@ const TablePage: React.FC = () => {
                     <input
                       type="text"
                       value={filters.project}
-                      onChange={e => setFilters(f => ({ ...f, project: e.target.value }))}
+                      onChange={(e) => setFilters((f) => ({ ...f, project: e.target.value }))}
                       placeholder="Ara..."
                       className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
                     />
                   </th>
-                  <th className="py-1 px-2 border-r border-gray-600/50">
-                    <input
-                      type="text"
-                      value={filters.adaParsel}
-                      onChange={e => setFilters(f => ({ ...f, adaParsel: e.target.value }))}
-                      placeholder="Ara..."
-                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange font-mono"
-                    />
-                  </th>
-                  <th className="py-1 px-2 border-r border-gray-600/50">
-                    <input
-                      type="text"
-                      value={filters.category}
-                      onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}
-                      placeholder="Ara..."
-                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
-                    />
-                  </th>
-                  <th className="py-1 px-2 border-r border-gray-600/50">
-                    <input
-                      type="text"
-                      value={filters.progress}
-                      onChange={e => setFilters(f => ({ ...f, progress: e.target.value }))}
-                      placeholder="Ara..."
-                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
-                    />
-                  </th>
-                  <th className="py-1 px-2 border-r border-gray-600/50">
-                    <input
-                      type="date"
-                      value={filterDate}
-                      onChange={e => setFilterDate(e.target.value)}
-                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
-                    />
-                  </th>
+                  {schemaFields.map((f) => (
+                    <th key={f.id} className="py-1 px-2 border-r border-gray-600/50">
+                      {f.id === 'ada' && (
+                        <input
+                          type="text"
+                          value={filters.adaParsel.split('/')[0]}
+                          onChange={(e) => {
+                            const p = filters.adaParsel.split('/');
+                            setFilters((prev) => ({ ...prev, adaParsel: `${e.target.value}/${p[1] || ''}`.replace(/\/$/, '') }));
+                          }}
+                          placeholder="Ada..."
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 font-mono focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                        />
+                      )}
+                      {f.id === 'parsel' && (
+                        <input
+                          type="text"
+                          value={filters.adaParsel.split('/')[1] || ''}
+                          onChange={(e) => {
+                            const p = filters.adaParsel.split('/');
+                            setFilters((prev) => ({ ...prev, adaParsel: `${p[0] || ''}/${e.target.value}`.replace(/^\//, '') }));
+                          }}
+                          placeholder="Parsel..."
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 font-mono focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                        />
+                      )}
+                      {f.id === 'category' && (
+                        <input
+                          type="text"
+                          value={filters.category}
+                          onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+                          placeholder="Ara..."
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                        />
+                      )}
+                      {f.id === 'progressLevel' && (
+                        <input
+                          type="text"
+                          value={filters.progress}
+                          onChange={(e) => setFilters((prev) => ({ ...prev, progress: e.target.value }))}
+                          placeholder="Ara..."
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                        />
+                      )}
+                      {f.id === 'date' && (
+                        <input
+                          type="date"
+                          value={filterDate}
+                          onChange={(e) => setFilterDate(e.target.value)}
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                        />
+                      )}
+                      {!['ada', 'parsel', 'category', 'progressLevel', 'date'].includes(f.id) && <span className="block py-1" />}
+                    </th>
+                  ))}
+                  {!schemaFields.some((f) => f.id === 'date') && (
+                    <th className="py-1 px-2 border-r border-gray-600/50">
+                      <input
+                        type="date"
+                        value={filterDate}
+                        onChange={(e) => setFilterDate(e.target.value)}
+                        className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                      />
+                    </th>
+                  )}
                   <th className="py-1 px-2 border-r border-gray-600/50">
                     <select
                       value={filters.status}
-                      onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+                      onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
                       className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
                     >
                       <option value="">Tümü</option>
@@ -327,9 +394,9 @@ const TablePage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-              {                displayNotes.length === 0 ? (
+              {displayNotes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className={`py-8 text-center whitespace-normal ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
+                  <td colSpan={5 + schemaFields.length + (schemaFields.some((f) => f.id === 'date') ? 0 : 1)} className={`py-8 text-center whitespace-normal ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
                     Henüz not bulunmuyor
                   </td>
                 </tr>
@@ -343,9 +410,7 @@ const TablePage: React.FC = () => {
                     <tr
                       key={note.id}
                       className={`border-t transition-colors ${rowBg} ${
-                        isDark
-                          ? 'border-slate-700/50 hover:bg-slate-800/50'
-                          : 'border-gray-200 hover:bg-blue-50'
+                        isDark ? 'border-slate-700/50 hover:bg-slate-800/50' : 'border-gray-200 hover:bg-blue-50'
                       }`}
                     >
                       <td className={`py-2 px-3 font-mono whitespace-nowrap ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>
@@ -360,18 +425,29 @@ const TablePage: React.FC = () => {
                           {note.projectName || '-'}
                         </button>
                       </td>
-                      <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
-                        {note.ada || '-'} / {note.parsel || '-'}
-                      </td>
-                      <td className={`py-2 px-3 border-r whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-400' : 'border-gray-200 text-gray-600'}`}>
-                        {note.category || '-'}
-                      </td>
-                      <td className={`py-2 px-3 border-r whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
-                        {note.progressLevel || '-'}
-                      </td>
-                      <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
-                        {formatWorkDate(getWorkDate(note))}
-                      </td>
+                      {schemaFields.map((f) => {
+                        const val = getNoteFieldValue(note, f.id);
+                        let display = '-';
+                        if (val !== undefined && val !== null) {
+                          if (f.type === 'date' && val) display = formatWorkDate(String(val));
+                          else if (Array.isArray(val)) display = val.length > 0 ? val.join(', ') : '-';
+                          else if (typeof val === 'boolean') display = val ? 'Evet' : '-';
+                          else if (val !== '') display = String(val);
+                        }
+                        return (
+                          <td
+                            key={f.id}
+                            className={`py-2 px-3 border-r whitespace-nowrap ${['ada', 'parsel'].includes(f.id) ? 'font-mono ' : ''}${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}
+                          >
+                            {display}
+                          </td>
+                        );
+                      })}
+                      {!schemaFields.some((f) => f.id === 'date') && (
+                        <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
+                          {formatWorkDate(getWorkDate(note))}
+                        </td>
+                      )}
                       <td className={`py-2 px-3 border-r whitespace-nowrap ${isDark ? 'border-slate-700/50' : 'border-gray-200'}`}>
                         <span
                           className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${

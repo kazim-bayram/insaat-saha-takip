@@ -44,6 +44,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    // System settings (note schema, etc.) - Admin write only
+    match /system_settings/{docId} {
+      // Everyone authenticated can read (workers need schema for Add Note form)
+      allow read: if isAuthenticated();
+      // Only admins can write
+      allow write: if isAdmin();
+    }
+    
     // Notes collection rules
     match /notes/{noteId} {
       // Workers can only read their own notes

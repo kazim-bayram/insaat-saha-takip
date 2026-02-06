@@ -145,23 +145,30 @@ export const useNotes = () => {
       // Upload all images
       const imageUrls = await uploadImages(formData.images || []);
 
-      const noteData = {
+      const noteData: Record<string, unknown> = {
         userId: currentUser.uid,
         userEmail: currentUser.email || '',
         userName: userProfile.displayName || '',
-        userRole: userProfile.role || 'worker',  // Track who created the note
-        imageUrls,  // New array field
+        userRole: userProfile.role || 'worker',
+        imageUrls,
         content: formData.content || '',
         projectName: formData.projectName || '',
-        category: formData.category || '',
-        date: formData.date || new Date().toISOString().split('T')[0],  // Work date YYYY-MM-DD
-        ada: formData.ada || '',
-        parsel: formData.parsel || '',
-        progressLevel: formData.progressLevel || '',
-        customFields: formData.customFields || [],
-        status: formData.status || ('Eksik' as NoteStatus),  // QA/QC status
+        status: formData.status || ('Eksik' as NoteStatus),
         createdAt: Timestamp.now()
       };
+
+      // Schema-driven: save dynamic data to data field
+      if (formData.data && typeof formData.data === 'object' && Object.keys(formData.data).length > 0) {
+        noteData.data = formData.data;
+      } else {
+        // Legacy flat fields (backward compatibility)
+        noteData.category = formData.category || '';
+        noteData.date = formData.date || new Date().toISOString().split('T')[0];
+        noteData.ada = formData.ada || '';
+        noteData.parsel = formData.parsel || '';
+        noteData.progressLevel = formData.progressLevel || '';
+        noteData.customFields = formData.customFields || [];
+      }
 
       await addDoc(collection(db, 'notes'), noteData);
     } catch (err) {
@@ -191,23 +198,27 @@ export const useNotes = () => {
     try {
       const noteRef = doc(db, 'notes', noteId);
       
-      // Sanitize form data - ensure no undefined values
       const sanitizedData: Record<string, unknown> = {
         updatedAt: Timestamp.now(),
         lastEditedBy: currentUser.uid,
         lastEditedByName: userProfile.displayName || ''
       };
 
-      // Only add fields that are defined
       if (formData.content !== undefined) sanitizedData.content = formData.content || '';
       if (formData.projectName !== undefined) sanitizedData.projectName = formData.projectName || '';
-      if (formData.category !== undefined) sanitizedData.category = formData.category || '';
-      if (formData.date !== undefined) sanitizedData.date = formData.date || '';
-      if (formData.ada !== undefined) sanitizedData.ada = formData.ada || '';
-      if (formData.parsel !== undefined) sanitizedData.parsel = formData.parsel || '';
-      if (formData.progressLevel !== undefined) sanitizedData.progressLevel = formData.progressLevel || '';
       if (formData.status !== undefined) sanitizedData.status = formData.status;
-      if (formData.customFields !== undefined) sanitizedData.customFields = formData.customFields || [];
+
+      // Schema-driven: save dynamic data to data field
+      if (formData.data && typeof formData.data === 'object') {
+        sanitizedData.data = formData.data;
+      } else {
+        if (formData.category !== undefined) sanitizedData.category = formData.category || '';
+        if (formData.date !== undefined) sanitizedData.date = formData.date || '';
+        if (formData.ada !== undefined) sanitizedData.ada = formData.ada || '';
+        if (formData.parsel !== undefined) sanitizedData.parsel = formData.parsel || '';
+        if (formData.progressLevel !== undefined) sanitizedData.progressLevel = formData.progressLevel || '';
+        if (formData.customFields !== undefined) sanitizedData.customFields = formData.customFields || [];
+      }
 
       // Handle images
       if (newImages && newImages.length > 0) {
@@ -358,14 +369,14 @@ export const useNotes = () => {
 
   // Get unique Ada values for filter dropdown
   const getAdaValues = useCallback((): string[] => {
-    const adas = new Set(notes.map(note => note.ada).filter(Boolean));
-    return Array.from(adas).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
+    const adas = notes.map(note => note.ada).filter((v): v is string => typeof v === 'string' && v.length > 0);
+    return Array.from(new Set(adas)).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
   }, [notes]);
 
   // Get unique Parsel values for filter dropdown
   const getParselValues = useCallback((): string[] => {
-    const parsels = new Set(notes.map(note => note.parsel).filter(Boolean));
-    return Array.from(parsels).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
+    const parsels = notes.map(note => note.parsel).filter((v): v is string => typeof v === 'string' && v.length > 0);
+    return Array.from(new Set(parsels)).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
   }, [notes]);
 
   // Update note status (Admin only)

@@ -4,6 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TablePage from './pages/TablePage';
+import FormBuilder from './pages/admin/FormBuilder';
 import LoadingSpinner from './components/LoadingSpinner';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import { CheckCircle2 } from 'lucide-react';
@@ -15,6 +16,15 @@ const AdminTableRoute: React.FC = () => {
     return <Navigate to="/" replace />;
   }
   return <TablePage />;
+};
+
+// Protect /form-builder: redirect workers to home
+const AdminFormBuilderRoute: React.FC = () => {
+  const { userProfile } = useAuth();
+  if (userProfile?.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+  return <FormBuilder />;
 };
 
 const App: React.FC = () => {
@@ -57,6 +67,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/table-view" element={<AdminTableRoute />} />
+        <Route path="/form-builder" element={<AdminFormBuilderRoute />} />
       </Routes>
       {/* Toast: Şifre değiştirildi */}
       {showPasswordChangeToast && (
