@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, normalizeStatus, getWorkDate, formatWorkDate, getNoteFieldValue } from '../types';
-import { useNoteSchema } from '../hooks/useNoteSchema';
 
 interface NoteCardProps {
   note: Note;
@@ -44,15 +43,14 @@ const NoteCard: React.FC<NoteCardProps> = ({
   commentCount
 }) => {
   const { isDark } = useTheme();
-  const { schema } = useNoteSchema();
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const schemaFields = [...schema.fields].sort((a, b) => a.order - b.order);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const workDate = getWorkDate(note);
   const formattedDate = formatWorkDate(workDate);
+  const categoryValue = String(getNoteFieldValue(note, 'category') || note.category || '').trim();
 
   // Current status config (normalize legacy statuses)
   const currentStatus = normalizeStatus(note.status);
@@ -332,55 +330,16 @@ const NoteCard: React.FC<NoteCardProps> = ({
           </h3>
         </div>
 
-        {/* Schema-driven fields (label/value pairs) */}
-        {schemaFields.length > 0 && (() => {
-          const hasValue = (v: any) =>
-            v !== undefined && v !== null &&
-            (typeof v === 'boolean' ? v : typeof v === 'string' ? v.trim() !== '' : Array.isArray(v) ? v.length > 0 : true);
-          const displayed = schemaFields.slice(0, 4).filter((f) => hasValue(getNoteFieldValue(note, f.id)));
-          const extraCount = schemaFields.slice(4).filter((f) => hasValue(getNoteFieldValue(note, f.id))).length;
-          if (displayed.length === 0 && extraCount === 0) return null;
-          const formatVal = (val: any, type: string) => {
-            if (val === undefined || val === null) return '';
-            if (type === 'date' && val) return formatWorkDate(String(val));
-            if (typeof val === 'boolean') return val ? 'Evet' : '';
-            if (Array.isArray(val)) return val.join(', ');
-            return String(val);
-          };
-          return (
-            <div className={`mb-3 p-2 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'}`}>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {displayed.map((field) => {
-                  const val = getNoteFieldValue(note, field.id);
-                  const displayVal = formatVal(val, field.type);
-                  if (!displayVal) return null;
-                  return (
-                    <div key={field.id} className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                      <span className={`font-medium ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>{field.label}:</span> {displayVal}
-                    </div>
-                  );
-                })}
-                {extraCount > 0 && (
-                  <span className={`text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>+{extraCount} daha</span>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Legacy custom fields (fallback) */}
-        {schemaFields.length === 0 && note.customFields && note.customFields.length > 0 && (
-          <div className={`mb-3 p-2 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'}`}>
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {note.customFields.slice(0, 3).map((field, index) => (
-                <div key={index} className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
-                  <span className={`font-medium ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>{field.label}:</span> {field.value}
-                </div>
-              ))}
-              {note.customFields.length > 3 && (
-                <span className={`text-xs ${isDark ? 'text-concrete-500' : 'text-gray-400'}`}>+{note.customFields.length - 3} daha</span>
-              )}
-            </div>
+        {/* Ana kategori etiketi */}
+        {categoryValue && (
+          <div className="mb-3">
+            <span
+              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                isDark ? 'bg-slate-800 text-concrete-200' : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {categoryValue}
+            </span>
           </div>
         )}
 

@@ -28,6 +28,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Note, NoteStatus, NOTE_STATUS_CONFIG, getNoteImages, Comment, normalizeStatus, getWorkDate, formatWorkDate, getNoteFieldValue } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useNoteSchema } from '../hooks/useNoteSchema';
+import { CATEGORY_SCHEMAS } from '../config/categorySchemas';
 
 interface NoteDetailModalProps {
   note: Note | null;
@@ -82,6 +83,12 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
 
   const workDate = getWorkDate(note);
   const formattedDate = formatWorkDate(workDate);
+
+  const categoryKey = ((note.category ||
+    (note.data && typeof (note.data as any).category === 'string'
+      ? (note.data as any).category
+      : '')) ?? '') as string;
+  const categorySchema = categoryKey ? CATEGORY_SCHEMAS[categoryKey] : undefined;
 
   const handleDownloadImage = (url: string) => {
     window.open(url, '_blank');
@@ -330,6 +337,54 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
                   </p>
                 </div>
               </div>
+
+              {/* Kategoriye özel alanlar */}
+              {categorySchema && categorySchema.length > 0 && (
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-lg ${isDark ? 'bg-emerald-600/10' : 'bg-emerald-50'}`}>
+                    <Layers className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>Kategori Detayları</p>
+                    <div className={`mt-2 rounded-lg p-3 ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'}`}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {categorySchema.map((field) => {
+                          const condition = field.condition;
+                          if (condition) {
+                            const dependsValue = getNoteFieldValue(note, condition.dependsOnId);
+                            if (dependsValue !== condition.expectedValue) {
+                              return null;
+                            }
+                          }
+
+                          const rawVal = getNoteFieldValue(note, field.id);
+                          if (rawVal === undefined || rawVal === null || (field.type !== 'checkbox' && String(rawVal).trim() === '')) {
+                            return null;
+                          }
+
+                          let displayVal = '';
+                          if (field.type === 'checkbox') {
+                            displayVal = rawVal ? 'Evet' : 'Hayır';
+                          } else if (field.type === 'date') {
+                            displayVal = typeof rawVal === 'string' ? formatWorkDate(rawVal) : '';
+                          } else {
+                            displayVal = String(rawVal);
+                          }
+
+                          return (
+                            <div key={field.id} className="flex items-center justify-between gap-2">
+                              <span className={`text-sm font-medium ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>
+                                {field.label}
+                              </span>
+                              <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{displayVal}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Schema-driven dynamic fields */}
               {schemaFields.length > 0 && (() => {

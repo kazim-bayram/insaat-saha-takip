@@ -13,6 +13,7 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { NoteFormData, Note, NoteStatus, UploadProgress, getNoteImages, normalizeStatus, FormField, FormFieldType, getNoteFieldValue } from '../types';
 import { useNoteSchema } from '../hooks/useNoteSchema';
+import { CATEGORY_SCHEMAS } from '../config/categorySchemas';
 
 interface ImagePreview {
   file: File;
@@ -42,6 +43,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const [projectName, setProjectName] = useState('');
   const [status, setStatus] = useState<NoteStatus>('Eksik');
   const [formData, setFormData] = useState<Record<string, any>>({});
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -76,7 +78,19 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
           data[f.id] = '';
         }
       });
+      if (editNote.data && typeof editNote.data === 'object') {
+        Object.entries(editNote.data).forEach(([key, value]) => {
+          if (data[key] === undefined) {
+            data[key] = value;
+          }
+        });
+      }
       setFormData(data);
+      const existingCategory =
+        (typeof data.category === 'string' && data.category) ||
+        (editNote.category ?? '') ||
+        (typeof editNote.data?.category === 'string' ? editNote.data.category : '');
+      setSelectedCategory(existingCategory || '');
     } else {
       const initial: Record<string, any> = {};
       fields.forEach((f) => {
@@ -86,6 +100,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         else initial[f.id] = '';
       });
       setFormData(initial);
+      setSelectedCategory(typeof initial.category === 'string' ? initial.category : '');
       setContent('');
       setProjectName('');
       setStatus('Eksik');
@@ -105,6 +120,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         else initial[f.id] = '';
       });
     setFormData(initial);
+    setSelectedCategory(typeof initial.category === 'string' ? initial.category : '');
     setContent('');
     setProjectName('');
     setStatus('Eksik');
@@ -116,6 +132,9 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
 
   const setFieldValue = (fieldId: string, value: any) => {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
+    if (fieldId === 'category') {
+      setSelectedCategory(typeof value === 'string' ? value : '');
+    }
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,7 +226,8 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         projectName: projectName.trim(),
         status,
         images: imageFiles,
-        data: { ...formData }
+        data: { ...formData },
+        category: typeof formData.category === 'string' ? formData.category : undefined
       };
       await onSubmit(payload, existingImages.length > 0 ? existingImages : undefined);
       resetForm();
@@ -417,15 +437,155 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                 Form yükleniyor...
               </div>
             ) : (
-              fields.map((field) => (
-                <DynamicFieldInput
-                  key={field.id}
-                  field={field}
-                  value={formData[field.id] ?? (field.type === 'checkbox' ? false : field.type === 'date' ? new Date().toISOString().split('T')[0] : field.type === 'multiselect' ? [] : '')}
-                  onChange={(v) => setFieldValue(field.id, v)}
-                  isDark={isDark}
-                />
-              ))
+              fields.map((field) => {
+                const fieldNode = (
+                  <DynamicFieldInput
+                    key={field.id}
+                    field={field}
+                    value={
+                      formData[field.id] ??
+                      (field.type === 'checkbox'
+                        ? false
+                        : field.type === 'date'
+                        ? new Date().toISOString().split('T')[0]
+                        : field.type === 'multiselect'
+                        ? []
+                        : '')
+                    }
+                    onChange={(v) => setFieldValue(field.id, v)}
+                    isDark={isDark}
+                  />
+                );
+
+                if (field.id !== 'category') {
+                  return fieldNode;
+                }
+
+                const categoryFields = selectedCategory ? CATEGORY_SCHEMAS[selectedCategory] : undefined;
+
+                return (
+                  <React.Fragment key={field.id}>
+                    {fieldNode}
+                    {categoryFields && categoryFields.length > 0 && (
+                      <div className="mt-3">
+                        <div className={`mb-2 text-sm font-medium ${isDark ? 'text-concrete-300' : 'text-gray-700'}`}>
+                          Kategoriye Özel Alanlar
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {categoryFields.map((catField) => {
+                            const condition = catField.condition;
+                            if (condition) {
+                              const dependsValue = formData[condition.dependsOnId];
+                              if (dependsValue !== condition.expectedValue) {
+                                return null;
+                              }
+                            }
+
+                            const value = formData[catField.id];
+
+                            if (catField.type === 'select') {
+                              return (
+                                <div key={catField.id}>
+                                  <label
+                                    className={`block text-sm font-medium mb-1 ${
+                                      isDark ? 'text-concrete-300' : 'text-gray-700'
+                                    }`}
+                                  >
+                                    {catField.label}
+                                  </label>
+                                  <select
+                                    value={value ?? ''}
+                                    onChange={(e) => setFieldValue(catField.id, e.target.value)}
+                                    className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                                      isDark
+                                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange'
+                                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                                    }`}
+                                  >
+                                    <option value="">Seçiniz...</option>
+                                    {(catField.options || []).map((opt) => (
+                                      <option key={opt} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              );
+                            }
+
+                            if (catField.type === 'checkbox') {
+                              return (
+                                <div key={catField.id} className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(value)}
+                                    onChange={(e) => setFieldValue(catField.id, e.target.checked)}
+                                    className="w-4 h-4 rounded border-slate-600 text-safety-orange focus:ring-safety-orange"
+                                  />
+                                  <span
+                                    className={`text-sm ${
+                                      isDark ? 'text-concrete-300' : 'text-gray-700'
+                                    }`}
+                                  >
+                                    {catField.label}
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            if (catField.type === 'date') {
+                              return (
+                                <div key={catField.id}>
+                                  <label
+                                    className={`block text-sm font-medium mb-1 ${
+                                      isDark ? 'text-concrete-300' : 'text-gray-700'
+                                    }`}
+                                  >
+                                    {catField.label}
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={typeof value === 'string' ? value : ''}
+                                    onChange={(e) => setFieldValue(catField.id, e.target.value)}
+                                    className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                                      isDark
+                                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange'
+                                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                                    }`}
+                                  />
+                                </div>
+                              );
+                            }
+
+                            // text fallback
+                            return (
+                              <div key={catField.id}>
+                                <label
+                                  className={`block text-sm font-medium mb-1 ${
+                                    isDark ? 'text-concrete-300' : 'text-gray-700'
+                                  }`}
+                                >
+                                  {catField.label}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={value ?? ''}
+                                  onChange={(e) => setFieldValue(catField.id, e.target.value)}
+                                  className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                                    isDark
+                                      ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange'
+                                      : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                                  }`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })
             )}
 
             {/* Status - Core */}

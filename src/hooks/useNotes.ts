@@ -160,6 +160,12 @@ export const useNotes = () => {
       // Schema-driven: save dynamic data to data field
       if (formData.data && typeof formData.data === 'object' && Object.keys(formData.data).length > 0) {
         noteData.data = formData.data;
+        const categoryFromData = (formData.data as Record<string, unknown>)['category'];
+        if (typeof categoryFromData === 'string' && categoryFromData.trim()) {
+          noteData.category = categoryFromData.trim();
+        } else if (formData.category && formData.category.trim()) {
+          noteData.category = formData.category.trim();
+        }
       } else {
         // Legacy flat fields (backward compatibility)
         noteData.category = formData.category || '';
@@ -211,6 +217,12 @@ export const useNotes = () => {
       // Schema-driven: save dynamic data to data field
       if (formData.data && typeof formData.data === 'object') {
         sanitizedData.data = formData.data;
+        const categoryFromData = (formData.data as Record<string, unknown>)['category'];
+        if (typeof categoryFromData === 'string') {
+          sanitizedData.category = categoryFromData.trim();
+        } else if (formData.category !== undefined) {
+          sanitizedData.category = formData.category || '';
+        }
       } else {
         if (formData.category !== undefined) sanitizedData.category = formData.category || '';
         if (formData.date !== undefined) sanitizedData.date = formData.date || '';
