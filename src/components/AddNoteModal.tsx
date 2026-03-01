@@ -71,14 +71,14 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         } else if (f.type === 'checkbox') {
           data[f.id] = false;
         } else if (f.type === 'date') {
-          data[f.id] = editNote.date || (editNote.createdAt?.toDate ? new Date(editNote.createdAt.toDate()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+          data[f.id] = editNote?.date || (editNote?.createdAt?.toDate ? new Date(editNote.createdAt.toDate()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
         } else if (f.type === 'multiselect') {
           data[f.id] = [];
         } else {
           data[f.id] = '';
         }
       });
-      if (editNote.data && typeof editNote.data === 'object') {
+      if (editNote?.data && typeof editNote.data === 'object') {
         Object.entries(editNote.data).forEach(([key, value]) => {
           if (data[key] === undefined) {
             data[key] = value;
@@ -88,8 +88,10 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
       setFormData(data);
       const existingCategory =
         (typeof data.category === 'string' && data.category) ||
-        (editNote.category ?? '') ||
-        (typeof editNote.data?.category === 'string' ? editNote.data.category : '');
+        (editNote?.category ?? '') ||
+        (editNote?.data && typeof editNote.data === 'object' && typeof (editNote.data as Record<string, unknown>).category === 'string'
+          ? (editNote.data as Record<string, unknown>).category
+          : '');
       setSelectedCategory(existingCategory || '');
     } else {
       const initial: Record<string, any> = {};
@@ -131,9 +133,30 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   };
 
   const setFieldValue = (fieldId: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [fieldId]: value }));
     if (fieldId === 'category') {
       setSelectedCategory(typeof value === 'string' ? value : '');
+      setFormData((prev) => {
+        const next = { ...prev, [fieldId]: value };
+        const allCategoryFieldIds = new Set<string>();
+        Object.values(CATEGORY_SCHEMAS).forEach((fields) => {
+          fields?.forEach((f) => allCategoryFieldIds.add(f.id));
+        });
+        allCategoryFieldIds.forEach((id) => delete next[id]);
+        return next;
+      });
+    } else {
+      setFormData((prev) => {
+        const next = { ...prev, [fieldId]: value };
+        Object.values(CATEGORY_SCHEMAS).forEach((fields) => {
+          (fields ?? []).forEach((catField) => {
+            const cond = catField.condition;
+            if (cond?.dependsOnId === fieldId && value !== cond.expectedValue) {
+              delete next[catField.id];
+            }
+          });
+        });
+        return next;
+      });
     }
   };
 

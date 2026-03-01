@@ -52,7 +52,7 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
   const { isDark } = useTheme();
   const { currentUser, isAdmin } = useAuth();
   const { schema } = useNoteSchema();
-  const schemaFields = [...schema.fields].sort((a, b) => a.order - b.order);
+  const schemaFields = [...(schema?.fields ?? [])].sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0));
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
   const [showComments, setShowComments] = useState(true);
@@ -84,10 +84,7 @@ const NoteDetailModal: React.FC<NoteDetailModalProps> = ({
   const workDate = getWorkDate(note);
   const formattedDate = formatWorkDate(workDate);
 
-  const categoryKey = ((note.category ||
-    (note.data && typeof (note.data as any).category === 'string'
-      ? (note.data as any).category
-      : '')) ?? '') as string;
+  const categoryKey = String(getNoteFieldValue(note, 'category') ?? note?.category ?? '').trim();
   const categorySchema = categoryKey ? CATEGORY_SCHEMAS[categoryKey] : undefined;
 
   const handleDownloadImage = (url: string) => {

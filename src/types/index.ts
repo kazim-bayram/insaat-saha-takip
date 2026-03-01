@@ -191,9 +191,10 @@ export const formatWorkDate = (dateStr: string): string => {
   return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y}`;
 };
 
-/** Get value for a schema field from a note (supports legacy flat fields) */
-export const getNoteFieldValue = (note: Note, fieldId: string): any => {
-  if (note.data && fieldId in note.data) {
+/** Get value for a schema field from a note (supports legacy flat fields, null-safe for legacy data) */
+export const getNoteFieldValue = (note: Note | null | undefined, fieldId: string): any => {
+  if (!note) return undefined;
+  if (note.data && typeof note.data === 'object' && fieldId in note.data) {
     return note.data[fieldId];
   }
   // Legacy mapping: schema field ids -> legacy flat fields

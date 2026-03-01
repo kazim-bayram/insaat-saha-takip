@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   ChevronDown,
@@ -15,7 +15,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotes } from '../hooks/useNotes';
 import { useNoteSchema } from '../hooks/useNoteSchema';
-import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate, getNoteFieldValue } from '../types';
+import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate, getNoteFieldValue, CATEGORY_OPTIONS } from '../types';
+import { CATEGORY_SCHEMAS, ZABIT_CATEGORY, TEBLIGAT_CATEGORY, KENTSEL_CATEGORY } from '../config/categorySchemas';
 import AddNoteModal from '../components/AddNoteModal';
 import NoteDetailModal from '../components/NoteDetailModal';
 import UserProfileMenu from '../components/UserProfileMenu';
@@ -27,13 +28,33 @@ const CORE_FIELD_IDS = ['category', 'ada', 'parsel', 'date', 'progressLevel'] as
 
 type SortField = 'projectName' | 'date' | 'category' | null;
 type SortDir = 'asc' | 'desc';
+type ActiveTab = 'genel' | 'zabit' | 'tebligat' | 'kentsel';
+
+/** Unified column type for genel (FormField) and zabit/tebligat (CategoryField) */
+interface TabDisplayField {
+  id: string;
+  label: string;
+  type: string;
+  options?: string[];
+  showInTable?: boolean;
+  showInFilter?: boolean;
+}
 
 const TablePage: React.FC = () => {
   const { isDark } = useTheme();
-  const { logout, isAdmin } = useAuth();
+  const { logout, isAdmin, currentUser, userProfile } = useAuth();
   const { schema } = useNoteSchema();
-  const schemaFields = [...schema.fields].sort((a, b) => a.order - b.order);
-  // Columns: core (category, ada, parsel, date, progressLevel) + any field with showInTable
+  const schemaFields = [...(schema?.fields ?? [])].sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0));
+
+  const isWorker = userProfile?.role === 'worker';
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    isWorker ? 'zabit' : 'genel'
+  );
+
+  const zabitFieldIds = useMemo(() => CATEGORY_SCHEMAS[ZABIT_CATEGORY]?.map((f) => f.id) ?? [], []);
+  const tebligatFieldIds = useMemo(() => CATEGORY_SCHEMAS[TEBLIGAT_CATEGORY]?.map((f) => f.id) ?? [], []);
+  const kentselFieldIds = useMemo(() => CATEGORY_SCHEMAS[KENTSEL_CATEGORY]?.map((f) => f.id) ?? [], []);
+
   const tableDisplayFields = useMemo(
     () =>
       schemaFields.filter(
@@ -41,11 +62,77 @@ const TablePage: React.FC = () => {
       ),
     [schemaFields]
   );
+
+  const tabDisplayFields = useMemo((): TabDisplayField[] => {
+    if (activeTab === 'genel') {
+      return tableDisplayFields.filter(
+        (f) => !zabitFieldIds.includes(f.id) && !tebligatFieldIds.includes(f.id) && !kentselFieldIds.includes(f.id)
+      ).map((f) => ({
+        id: f.id,
+        label: f.label,
+        type: f.type,
+        options: f.options,
+        showInTable: f.showInTable,
+        showInFilter: f.showInFilter
+      }));
+    }
+    if (activeTab === 'zabit') {
+      const core: TabDisplayField[] = [
+        { id: 'ada', label: 'Ada', type: 'text' },
+        { id: 'parsel', label: 'Parsel', type: 'text' },
+        { id: 'date', label: 'Tarih', type: 'date' }
+      ];
+      const zabit = (CATEGORY_SCHEMAS[ZABIT_CATEGORY] ?? []).map((f) => ({
+        id: f.id,
+        label: f.label,
+        type: f.type,
+        options: f.options
+      }));
+      return [...core, ...zabit];
+    }
+    if (activeTab === 'tebligat') {
+      const core: TabDisplayField[] = [
+        { id: 'ada', label: 'Ada', type: 'text' },
+        { id: 'parsel', label: 'Parsel', type: 'text' },
+        { id: 'date', label: 'Tarih', type: 'date' }
+      ];
+      const tebligat = (CATEGORY_SCHEMAS[TEBLIGAT_CATEGORY] ?? []).map((f) => ({
+        id: f.id,
+        label: f.label,
+        type: f.type,
+        options: f.options
+      }));
+      return [...core, ...tebligat];
+    }
+    if (activeTab === 'kentsel') {
+      const core: TabDisplayField[] = [
+        { id: 'ada', label: 'Ada', type: 'text' },
+        { id: 'parsel', label: 'Parsel', type: 'text' },
+        { id: 'date', label: 'Tarih', type: 'date' }
+      ];
+      const kentsel = (CATEGORY_SCHEMAS[KENTSEL_CATEGORY] ?? []).map((f) => ({
+        id: f.id,
+        label: f.label,
+        type: f.type,
+        options: f.options
+      }));
+      return [...core, ...kentsel];
+    }
+    return tableDisplayFields.map((f) => ({
+      id: f.id,
+      label: f.label,
+      type: f.type,
+      options: f.options,
+      showInTable: f.showInTable,
+      showInFilter: f.showInFilter
+    }));
+  }, [activeTab, tableDisplayFields, zabitFieldIds, tebligatFieldIds, kentselFieldIds]);
   const {
     notes,
     loading,
     error,
     updateNote,
+    updateNoteField,
     deleteNote,
     addComment,
     deleteComment,
@@ -61,9 +148,11 @@ const TablePage: React.FC = () => {
     adaParsel: '',
     category: '',
     progress: '',
-    status: ''
+    status: '',
+    worker: ''
   });
   const [dynamicFilters, setDynamicFilters] = useState<Record<string, string>>({});
+  const [editingCell, setEditingCell] = useState<{ id: string; field: string; value: string } | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -71,22 +160,56 @@ const TablePage: React.FC = () => {
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
 
-  // Apply column filters (core + dynamic, AND logic, case-insensitive)
+  const canEditInline = isAdmin;
+
+  useEffect(() => {
+    if (isWorker && activeTab === 'genel') {
+      setActiveTab('zabit');
+    }
+  }, [isWorker, activeTab]);
+
+  // Apply tab-based category filter first, then column filters (AND logic, case-insensitive)
   const filteredNotes = useMemo(() => {
-    return notes.filter((note) => {
-      const projectMatch = !filters.project || (note.projectName || '').toLowerCase().includes(filters.project.toLowerCase());
+    let base: Note[] = notes;
+
+    if (activeTab === 'genel') {
+      base = notes.filter((n) => {
+        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        return cat !== ZABIT_CATEGORY && cat !== TEBLIGAT_CATEGORY && cat !== KENTSEL_CATEGORY;
+      });
+    } else if (activeTab === 'zabit') {
+      base = notes.filter((n) => {
+        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        return cat === ZABIT_CATEGORY;
+      });
+    } else if (activeTab === 'tebligat') {
+      base = notes.filter((n) => {
+        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        return cat === TEBLIGAT_CATEGORY;
+      });
+    } else if (activeTab === 'kentsel') {
+      base = notes.filter((n) => {
+        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        return cat === KENTSEL_CATEGORY;
+      });
+    }
+
+    return base.filter((note) => {
+      if (isWorker && currentUser && (note.userId == null || note.userId !== currentUser.uid)) return false;
+      const projectMatch = !filters.project || String(note?.projectName ?? '').toLowerCase().includes(String(filters.project ?? '').toLowerCase());
       const adaParselStr = `${getNoteFieldValue(note, 'ada') || ''}/${getNoteFieldValue(note, 'parsel') || ''}`.toLowerCase();
       const adaParselMatch = !filters.adaParsel || adaParselStr.includes(filters.adaParsel.toLowerCase());
       const categoryVal = String(getNoteFieldValue(note, 'category') || '');
       const categoryMatch = !filters.category || categoryVal.toLowerCase().includes(filters.category.toLowerCase());
       const progressVal = String(getNoteFieldValue(note, 'progressLevel') || '');
       const progressMatch = !filters.progress || progressVal.toLowerCase().includes(filters.progress.toLowerCase());
-      const noteStatus = normalizeStatus(note.status);
+      const workerVal = String(note?.userName ?? note?.userEmail ?? '').toLowerCase();
+      const workerMatch = !filters.worker || workerVal.includes(filters.worker.toLowerCase());
+      const noteStatus = normalizeStatus(note?.status);
       const statusMatch = !filters.status || noteStatus === filters.status;
       const dateMatch = !filterDate || getWorkDate(note) === filterDate;
       let dynamicMatch = true;
-      tableDisplayFields.forEach((f) => {
-        if (!f.showInTable || !f.showInFilter) return;
+      tabDisplayFields.forEach((f) => {
         const filterVal = dynamicFilters[f.id]?.trim();
         if (!filterVal) return;
         const cellVal = getNoteFieldValue(note, f.id);
@@ -95,9 +218,9 @@ const TablePage: React.FC = () => {
           : '';
         if (!str.toLowerCase().includes(filterVal.toLowerCase())) dynamicMatch = false;
       });
-      return projectMatch && adaParselMatch && categoryMatch && progressMatch && statusMatch && dateMatch && dynamicMatch;
+      return projectMatch && adaParselMatch && categoryMatch && progressMatch && workerMatch && statusMatch && dateMatch && dynamicMatch;
     });
-  }, [notes, filters, filterDate, tableDisplayFields, dynamicFilters]);
+  }, [notes, activeTab, filters, filterDate, tabDisplayFields, dynamicFilters, zabitFieldIds, tebligatFieldIds, isWorker, currentUser]);
 
   // Sort filtered notes
   const displayNotes = useMemo(() => {
@@ -113,8 +236,8 @@ const TablePage: React.FC = () => {
           aVal = getWorkDate(a) || '';
           bVal = getWorkDate(b) || '';
         } else if (sortField === 'category') {
-          aVal = (a.category || '').toLowerCase();
-          bVal = (b.category || '').toLowerCase();
+          aVal = (getNoteFieldValue(a, 'category') || a.category || '').toString().toLowerCase();
+          bVal = (getNoteFieldValue(b, 'category') || b.category || '').toString().toLowerCase();
         }
         const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
         return sortDir === 'asc' ? cmp : -cmp;
@@ -135,37 +258,45 @@ const TablePage: React.FC = () => {
 
   const handleExport = useCallback(() => {
     const getStatusLabel = (s: string) => NOTE_STATUS_CONFIG[normalizeStatus(s)]?.label || 'Eksik';
-    const exportCols = tableDisplayFields.map((f) => f.label);
-    const allCols = ['Proje', ...exportCols, 'Durum', 'Tarih', 'İçerik', 'Yazan'];
-    const data = displayNotes.map((note) => {
-      const row: Record<string, string> = {
-        'Proje': note.projectName || '',
-        'Durum': getStatusLabel(note.status),
-        'Tarih': formatWorkDate(getWorkDate(note)),
-        'İçerik': (note.content || '').length > 500 ? (note.content || '').slice(0, 500) + '...' : (note.content || ''),
-        'Yazan': note.userName || note.userEmail || ''
+    const adaVal = (n: Note) => getNoteFieldValue(n, 'ada');
+    const parselVal = (n: Note) => getNoteFieldValue(n, 'parsel');
+
+    // Export filteredNotes with columns matching current activeTab
+    const exportData = filteredNotes.map((note, index) => {
+      const base: Record<string, string | number> = {
+        'Sıra': index + 1,
+        'Proje İsmi': note.projectName || '-',
+        'Çalışan': note.userName || note.userEmail || '-',
+        'Ada/Parsel': `${adaVal(note) ?? ''} / ${parselVal(note) ?? ''}`.trim().replace(/^\s*\/\s*$/, '') || '-',
+        'Tarih': getWorkDate(note) ? formatWorkDate(getWorkDate(note)) : '-',
+        'Durum': getStatusLabel(note.status)
       };
-      tableDisplayFields.forEach((f) => {
+      tabDisplayFields.forEach((f) => {
         const v = getNoteFieldValue(note, f.id);
-        let display = '';
+        let display = '-';
         if (v !== undefined && v !== null) {
-          if (f.type === 'date' && v) display = formatWorkDate(String(v));
-          else if (Array.isArray(v)) display = v.length > 0 ? v.join(', ') : '';
-          else if (typeof v === 'boolean') display = v ? 'Evet' : '';
+          if ((f.type === 'date' || f.id === 'date') && v) display = formatWorkDate(String(v));
+          else if (Array.isArray(v)) display = v.length > 0 ? v.join(', ') : '-';
+          else if (typeof v === 'boolean') display = v ? 'Evet' : '-';
           else if (v !== '') display = String(v);
         }
-        row[f.label] = display;
+        base[f.label] = display;
       });
-      return allCols.reduce<Record<string, string>>((acc, col) => {
-        acc[col] = row[col] ?? '';
-        return acc;
-      }, {});
+      return base as Record<string, string | number>;
     });
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Saha Raporu');
-    XLSX.writeFile(wb, 'Saha_Takip_Raporu.xlsx');
-  }, [displayNotes, tableDisplayFields]);
+
+    const sheetName = activeTab === 'genel' ? 'Genel Raporu' : activeTab === 'zabit' ? 'Zabıt İzleme' : activeTab === 'tebligat' ? 'Tebligat Takip' : 'Kentsel Donusum';
+    const fileName = activeTab === 'genel' ? 'Saha_Takip_Raporu' : activeTab === 'zabit' ? 'Zabit_Izleme_Raporu' : activeTab === 'tebligat' ? 'Tebligat_Takip_Raporu' : 'Kentsel_Donusum_Raporu';
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const colWidths = [
+      { wch: 5 }, { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 8 },
+      ...tabDisplayFields.map(() => ({ wch: 14 }))
+    ];
+    worksheet['!cols'] = colWidths;
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    XLSX.writeFile(workbook, `${fileName}.xlsx`);
+  }, [filteredNotes, tabDisplayFields, activeTab]);
 
   const handleEditNote = (note: Note) => {
     setEditingNote(note);
@@ -193,6 +324,39 @@ const TablePage: React.FC = () => {
     setEditingNote(null);
     setShowAddModal(false);
   };
+
+  const editInputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+
+  useEffect(() => {
+    if (editingCell) {
+      editInputRef.current?.focus();
+    }
+  }, [editingCell]);
+
+  const handleCellSave = useCallback(
+    async (noteId: string, field: string, newValue: string) => {
+      if (!editingCell || editingCell.id !== noteId || editingCell.field !== field) return;
+      const oldVal = String(editingCell.value ?? '');
+      const trimmed = newValue.trim();
+      setEditingCell(null);
+      if (trimmed === oldVal) return;
+      try {
+        await updateNoteField(noteId, field, trimmed);
+      } catch {
+        // Error shown via useNotes setError
+      }
+    },
+    [editingCell, updateNoteField]
+  );
+
+  const handleCellEdit = useCallback(
+    (note: Note, field: string, currentValue: string) => {
+      if (userProfile?.role !== 'admin') return;
+      if (!canEditInline || !canEditNote(note)) return;
+      setEditingCell({ id: note.id, field, value: currentValue });
+    },
+    [userProfile?.role, canEditInline, canEditNote]
+  );
 
   if (loading) {
     return <LoadingSpinner fullScreen message="Tablo yükleniyor..." />;
@@ -224,7 +388,7 @@ const TablePage: React.FC = () => {
                   </h1>
                   <p className={`text-xs ${isDark ? 'text-concrete-400' : 'text-gray-500'}`}>
                     {displayNotes.length} not
-                    {filters.project || filters.adaParsel || filters.category || filters.progress || filters.status || filterDate ? ` (filtrelenmiş)` : ''}
+                    {filters.project || filters.adaParsel || filters.category || filters.progress || filters.worker || filters.status || filterDate ? ` (filtrelenmiş)` : ''}
                   </p>
                 </div>
               </div>
@@ -274,16 +438,59 @@ const TablePage: React.FC = () => {
           </div>
         )}
 
-        <div className={`rounded-lg border overflow-hidden ${
-          isDark ? 'border-slate-700/50' : 'border-gray-200'
-        }`}>
-          <div className="overflow-x-auto w-full">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-gray-800 text-white">
-                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 w-12 whitespace-nowrap">#</th>
+        {/* Tab Navigation */}
+        <div className="flex space-x-4 border-b border-gray-200 mb-4">
+          {!isWorker && (
+            <button
+              onClick={() => setActiveTab('genel')}
+              className={`pb-3 px-1 text-sm font-medium transition-colors ${
+                activeTab === 'genel'
+                  ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📁 Genel Tablo
+            </button>
+          )}
+          <button
+            onClick={() => setActiveTab('zabit')}
+            className={`pb-3 px-1 text-sm font-medium transition-colors ${
+              activeTab === 'zabit'
+                ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            ⚖️ Zabıt İzleme
+          </button>
+          <button
+            onClick={() => setActiveTab('tebligat')}
+            className={`pb-3 px-1 text-sm font-medium transition-colors ${
+              activeTab === 'tebligat'
+                ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            📄 Tebligat Takip
+          </button>
+          <button
+            onClick={() => setActiveTab('kentsel')}
+            className={`pb-3 px-1 text-sm font-medium transition-colors ${
+              activeTab === 'kentsel'
+                ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            🏗️ Kentsel Dönüşüm
+          </button>
+        </div>
+
+        <div className="w-full overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white">
+          <table className="w-full text-left border-collapse min-w-max text-sm">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700 border-b-2 border-gray-300">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap">#</th>
                   <th
-                    className="sticky left-0 z-20 py-2 px-3 text-left font-semibold border-r border-gray-700/50 bg-gray-800 cursor-pointer hover:bg-gray-700/50 select-none whitespace-nowrap shadow-[4px_0_6px_-2px_rgba(0,0,0,0.3)]"
+                    className="sticky left-0 z-20 px-4 py-3 text-left font-semibold border-r border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 select-none whitespace-nowrap shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)] min-w-[200px]"
                     onClick={() => handleSort('projectName')}
                   >
                     <span className="flex items-center gap-1">
@@ -291,19 +498,20 @@ const TablePage: React.FC = () => {
                       {sortField === 'projectName' && (sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                     </span>
                   </th>
-                  {tableDisplayFields.map((f) => (
+                  <th className="px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap min-w-[120px]">Çalışan</th>
+                  {tabDisplayFields.map((f) => (
                     <th
                       key={f.id}
-                      className={`py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap ${
+                      className={`px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap min-w-[100px] ${
                         ['ada', 'parsel'].includes(f.id) ? 'font-mono' : ''
                       }`}
                     >
                       {f.label}
                     </th>
                   ))}
-                  {!tableDisplayFields.some((f) => f.id === 'date') && (
+                  {!tabDisplayFields.some((f) => f.id === 'date') && (
                     <th
-                      className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 cursor-pointer hover:bg-gray-700/50 select-none font-mono whitespace-nowrap"
+                      className="px-4 py-3 text-left font-semibold border-r border-gray-200 cursor-pointer hover:bg-gray-100 select-none font-mono whitespace-nowrap min-w-[110px]"
                       onClick={() => handleSort('date')}
                     >
                       <span className="flex items-center gap-1">
@@ -312,22 +520,31 @@ const TablePage: React.FC = () => {
                       </span>
                     </th>
                   )}
-                  <th className="py-2 px-3 text-left font-semibold border-r border-gray-700/50 whitespace-nowrap">Durum</th>
-                  <th className="py-2 px-3 text-left font-semibold w-24 whitespace-nowrap">İşlemler</th>
+                  <th className="px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap min-w-[90px]">Durum</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[100px]">İşlemler</th>
                 </tr>
-                <tr className="bg-gray-700/80 text-white">
-                  <th className="py-1 px-2 border-r border-gray-600/50" />
-                  <th className="sticky left-0 z-20 py-1 px-2 border-r border-gray-600/50 bg-gray-700/80 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.3)]">
+                <tr className="bg-gray-100/80 text-gray-800 border-b border-gray-200">
+                  <th className="px-4 py-3 border-r border-gray-200 whitespace-nowrap" />
+                  <th className="sticky left-0 z-20 px-4 py-3 border-r border-gray-200 bg-gray-100/80 whitespace-nowrap shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]">
                     <input
                       type="text"
                       value={filters.project}
                       onChange={(e) => setFilters((f) => ({ ...f, project: e.target.value }))}
                       placeholder="Ara..."
-                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </th>
-                  {tableDisplayFields.map((f) => (
-                    <th key={f.id} className="py-1 px-2 border-r border-gray-600/50">
+                  <th className="px-4 py-3 border-r border-gray-200 bg-gray-100/80 whitespace-nowrap shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                    <input
+                      type="text"
+                      value={filters.worker}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, worker: e.target.value }))}
+                      placeholder="Ara..."
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </th>
+                  {tabDisplayFields.map((f) => (
+                    <th key={f.id} className="px-4 py-3 border-r border-gray-200 whitespace-nowrap">
                       {f.id === 'ada' && (
                         <input
                           type="text"
@@ -337,7 +554,7 @@ const TablePage: React.FC = () => {
                             setFilters((prev) => ({ ...prev, adaParsel: `${e.target.value}/${p[1] || ''}`.replace(/\/$/, '') }));
                           }}
                           placeholder="Ada..."
-                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 font-mono focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       )}
                       {f.id === 'parsel' && (
@@ -349,7 +566,7 @@ const TablePage: React.FC = () => {
                             setFilters((prev) => ({ ...prev, adaParsel: `${p[0] || ''}/${e.target.value}`.replace(/^\//, '') }));
                           }}
                           placeholder="Parsel..."
-                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 font-mono focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       )}
                       {f.id === 'category' && (
@@ -358,7 +575,7 @@ const TablePage: React.FC = () => {
                           value={filters.category}
                           onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
                           placeholder="Ara..."
-                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       )}
                       {f.id === 'progressLevel' && (
@@ -367,7 +584,7 @@ const TablePage: React.FC = () => {
                           value={filters.progress}
                           onChange={(e) => setFilters((prev) => ({ ...prev, progress: e.target.value }))}
                           placeholder="Ara..."
-                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       )}
                       {f.id === 'date' && (
@@ -375,120 +592,216 @@ const TablePage: React.FC = () => {
                           type="date"
                           value={filterDate}
                           onChange={(e) => setFilterDate(e.target.value)}
-                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       )}
-                      {/* Filter input: non-core columns with showInTable AND showInFilter */}
                       {!CORE_FIELD_IDS.includes(f.id as (typeof CORE_FIELD_IDS)[number]) && f.showInTable && f.showInFilter && (
                         <input
                           type="text"
                           value={dynamicFilters[f.id] ?? ''}
                           onChange={(e) => setDynamicFilters((prev) => ({ ...prev, [f.id]: e.target.value }))}
                           placeholder="Ara..."
-                          className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                          className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       )}
                       {!CORE_FIELD_IDS.includes(f.id as (typeof CORE_FIELD_IDS)[number]) && (!f.showInTable || !f.showInFilter) && <span className="block py-1" />}
                     </th>
                   ))}
-                  {!tableDisplayFields.some((f) => f.id === 'date') && (
-                    <th className="py-1 px-2 border-r border-gray-600/50">
+                  {!tabDisplayFields.some((f) => f.id === 'date') && (
+                    <th className="px-4 py-3 border-r border-gray-200 whitespace-nowrap">
                       <input
                         type="date"
                         value={filterDate}
                         onChange={(e) => setFilterDate(e.target.value)}
-                        className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                        className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </th>
                   )}
-                  <th className="py-1 px-2 border-r border-gray-600/50">
+                  <th className="px-4 py-3 border-r border-gray-200 whitespace-nowrap">
                     <select
                       value={filters.status}
                       onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-                      className="w-full py-1 px-2 text-sm rounded border border-gray-500 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-safety-orange"
+                      className="w-full py-1 px-2 text-sm rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Tümü</option>
                       <option value="Eksik">Eksik</option>
                       <option value="Onay">Onay</option>
                     </select>
                   </th>
-                  <th className="py-1 px-2" />
+                  <th className="px-4 py-3 whitespace-nowrap" />
                 </tr>
               </thead>
               <tbody>
               {displayNotes.length === 0 ? (
                 <tr>
-                  <td colSpan={5 + tableDisplayFields.length + (tableDisplayFields.some((f) => f.id === 'date') ? 0 : 1)} className={`py-8 text-center whitespace-normal ${isDark ? 'text-concrete-500' : 'text-gray-500'}`}>
+                  <td colSpan={6 + tabDisplayFields.length + (tabDisplayFields.some((f) => f.id === 'date') ? 0 : 1)} className="px-4 py-8 text-center whitespace-normal text-gray-500 bg-white">
                     Henüz not bulunmuyor
                   </td>
                 </tr>
               ) : (
                 displayNotes.map((note, idx) => {
                   const status = normalizeStatus(note.status);
-                  const isOddRow = idx % 2 === 1;
-                  const rowBg = isOddRow ? (isDark ? 'bg-slate-900/30' : 'bg-gray-50') : (isDark ? 'bg-slate-850' : 'bg-white');
-                  const stickyBg = isOddRow ? (isDark ? 'bg-slate-900/30' : 'bg-gray-50') : (isDark ? 'bg-slate-850' : 'bg-white');
+                  const isEditingProject = editingCell?.id === note.id && editingCell?.field === 'projectName';
+                  const isEditingStatus = editingCell?.id === note.id && editingCell?.field === 'status';
                   return (
                     <tr
                       key={note.id}
-                      className={`border-t transition-colors ${rowBg} ${
-                        isDark ? 'border-slate-700/50 hover:bg-slate-800/50' : 'border-gray-200 hover:bg-blue-50'
-                      }`}
+                      className="group border-t border-gray-200 bg-white hover:bg-blue-50/50 transition-colors"
                     >
-                      <td className={`py-2 px-3 font-mono whitespace-nowrap ${isDark ? 'text-concrete-300' : 'text-gray-600'}`}>
+                      <td className="px-4 py-2 font-mono whitespace-nowrap text-gray-600 border-r border-gray-200">
                         {idx + 1}
                       </td>
-                      <td className={`sticky left-0 z-[5] py-2 px-3 border-r whitespace-nowrap ${stickyBg} ${isDark ? 'border-slate-700/50 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.2)]' : 'border-gray-200 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]'}`}>
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedNote(note); setIsDetailModalOpen(true); }}
-                          className={`text-left w-full text-blue-500 hover:text-blue-400 hover:underline cursor-pointer focus:outline-none focus:ring-0 ${isDark ? 'text-blue-400 hover:text-blue-300' : ''}`}
-                        >
-                          {note.projectName || '-'}
-                        </button>
+                      <td className="sticky left-0 z-[5] px-4 py-2 border-r border-gray-200 bg-white group-hover:bg-blue-50/50 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.06)] whitespace-nowrap min-w-[200px]">
+                        {isEditingProject && canEditInline && canEditNote(note) ? (
+                          <input
+                            ref={editInputRef as React.RefObject<HTMLInputElement>}
+                            type="text"
+                            value={editingCell?.value ?? note.projectName ?? ''}
+                            onChange={(e) => setEditingCell((c) => (c ? { ...c, value: e.target.value } : null))}
+                            onBlur={() => handleCellSave(note.id, 'projectName', editingCell?.value ?? '')}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleCellSave(note.id, 'projectName', editingCell?.value ?? ''); }}
+                            className="w-full min-w-0 py-0.5 px-1.5 text-sm bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded text-gray-900"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedNote(note); setIsDetailModalOpen(true); }}
+                            onDoubleClick={(e) => { e.preventDefault(); handleCellEdit(note, 'projectName', note.projectName || ''); }}
+                            className={`text-left w-full text-blue-600 hover:text-blue-500 hover:underline focus:outline-none truncate block ${canEditInline ? 'cursor-pointer' : 'cursor-default'}`}
+                          >
+                            {note.projectName || '-'}
+                          </button>
+                        )}
                       </td>
-                      {tableDisplayFields.map((f) => {
+                      <td className="px-4 py-2 border-r border-gray-200 text-gray-700 whitespace-nowrap min-w-[120px]">
+                        {note.userName || note.userEmail || '-'}
+                      </td>
+                      {tabDisplayFields.map((f) => {
                         const val = getNoteFieldValue(note, f.id);
                         let display = '-';
+                        let rawVal = '';
                         if (val !== undefined && val !== null) {
-                          if (f.type === 'date' && val) display = formatWorkDate(String(val));
-                          else if (Array.isArray(val)) display = val.length > 0 ? val.join(', ') : '-';
-                          else if (typeof val === 'boolean') display = val ? 'Evet' : '-';
-                          else if (val !== '') display = String(val);
+                          if ((f.type === 'date' || f.id === 'date') && val) {
+                            const dateStr = f.id === 'date' ? (getWorkDate(note) || String(val)) : String(val);
+                            display = formatWorkDate(dateStr);
+                            rawVal = dateStr;
+                          } else if (Array.isArray(val)) {
+                            display = val.length > 0 ? val.join(', ') : '-';
+                            rawVal = val.join(', ');
+                          } else if (typeof val === 'boolean' || val === 'true' || val === 'false') {
+                            const boolVal = val === true || val === 'true';
+                            display = boolVal ? 'Evet' : '-';
+                            rawVal = boolVal ? 'true' : 'false';
+                          } else if (val !== '') {
+                            display = String(val);
+                            rawVal = String(val);
+                          }
                         }
+                        const isEditing = editingCell?.id === note.id && editingCell?.field === f.id;
+                        const options = (f.type === 'select' || f.type === 'multiselect') ? (f.options ?? (f.id === 'category' ? CATEGORY_OPTIONS : [])) : [];
+                        const useSelect = (f.id === 'category' || f.type === 'select') && options.length > 0;
+                        const useDate = f.type === 'date' || f.id === 'date';
+                        const useCheckbox = f.type === 'checkbox';
                         return (
                           <td
                             key={f.id}
-                            className={`py-2 px-3 border-r whitespace-nowrap ${['ada', 'parsel'].includes(f.id) ? 'font-mono ' : ''}${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}
+                            className={`px-4 py-2 border-r border-gray-200 whitespace-nowrap min-w-[100px] ${['ada', 'parsel'].includes(f.id) ? 'font-mono' : ''} ${isEditing && canEditInline && canEditNote(note) ? 'p-0' : 'text-gray-700'} ${canEditInline ? 'cursor-pointer' : ''}`}
+                            onDoubleClick={() => handleCellEdit(note, f.id, rawVal)}
                           >
-                            {display}
+                            {isEditing && canEditInline && canEditNote(note) ? (
+                              useCheckbox ? (
+                                <input
+                                  ref={editInputRef as React.RefObject<HTMLInputElement>}
+                                  type="checkbox"
+                                  checked={editingCell?.value === 'true'}
+                                  onChange={(e) => {
+                                    setEditingCell((c) => (c ? { ...c, value: e.target.checked ? 'true' : 'false' } : null));
+                                    handleCellSave(note.id, f.id, e.target.checked ? 'true' : 'false');
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : useSelect ? (
+                                <select
+                                  ref={editInputRef as React.RefObject<HTMLSelectElement>}
+                                  value={editingCell?.value ?? rawVal}
+                                  onChange={(e) => setEditingCell((c) => (c ? { ...c, value: e.target.value } : null))}
+                                  onBlur={() => handleCellSave(note.id, f.id, editingCell?.value ?? '')}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleCellSave(note.id, f.id, editingCell?.value ?? ''); }}
+                                  className="w-full min-w-0 py-0.5 px-1.5 text-sm bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded text-gray-900 appearance-none"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="">Seçiniz</option>
+                                  {(options || []).map((opt) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              ) : useDate ? (
+                                <input
+                                  ref={editInputRef as React.RefObject<HTMLInputElement>}
+                                  type="date"
+                                  value={editingCell?.value ?? rawVal}
+                                  onChange={(e) => setEditingCell((c) => (c ? { ...c, value: e.target.value } : null))}
+                                  onBlur={() => handleCellSave(note.id, f.id, editingCell?.value ?? '')}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleCellSave(note.id, f.id, editingCell?.value ?? ''); }}
+                                  className="w-full min-w-0 py-0.5 px-1.5 text-sm bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded text-gray-900"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <input
+                                  ref={editInputRef as React.RefObject<HTMLInputElement>}
+                                  type="text"
+                                  value={editingCell?.value ?? rawVal}
+                                  onChange={(e) => setEditingCell((c) => (c ? { ...c, value: e.target.value } : null))}
+                                  onBlur={() => handleCellSave(note.id, f.id, editingCell?.value ?? '')}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleCellSave(note.id, f.id, editingCell?.value ?? ''); }}
+                                  className="w-full min-w-0 py-0.5 px-1.5 text-sm bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded text-gray-900"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              )
+                            ) : (
+                              <span className="block truncate">{display}</span>
+                            )}
                           </td>
                         );
                       })}
-                      {!tableDisplayFields.some((f) => f.id === 'date') && (
-                        <td className={`py-2 px-3 border-r font-mono whitespace-nowrap ${isDark ? 'border-slate-700/50 text-concrete-300' : 'border-gray-200 text-gray-700'}`}>
+                      {!tabDisplayFields.some((f) => f.id === 'date') && (
+                        <td className="px-4 py-2 border-r border-gray-200 font-mono whitespace-nowrap text-gray-700 min-w-[110px]">
                           {formatWorkDate(getWorkDate(note))}
                         </td>
                       )}
-                      <td className={`py-2 px-3 border-r whitespace-nowrap ${isDark ? 'border-slate-700/50' : 'border-gray-200'}`}>
-                        <span
-                          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                            status === 'Onay'
-                              ? 'bg-green-500/20 text-green-400'
-                              : 'bg-red-500/20 text-red-400'
-                          }`}
-                        >
-                          {NOTE_STATUS_CONFIG[status]?.label || 'Eksik'}
-                        </span>
+                      <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap min-w-[90px]">
+                        {isEditingStatus && canEditInline && canEditNote(note) ? (
+                          <select
+                            ref={editInputRef as React.RefObject<HTMLSelectElement>}
+                            value={editingCell?.value ?? status}
+                            onChange={(e) => setEditingCell((c) => (c ? { ...c, value: e.target.value } : null))}
+                            onBlur={() => handleCellSave(note.id, 'status', editingCell?.value ?? status)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleCellSave(note.id, 'status', editingCell?.value ?? status); }}
+                            className="w-full py-0.5 px-1.5 text-sm bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded text-gray-900"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <option value="Eksik">Eksik</option>
+                            <option value="Onay">Onay</option>
+                          </select>
+                        ) : (
+                          <span
+                            onDoubleClick={() => handleCellEdit(note, 'status', status)}
+                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${canEditInline ? 'cursor-pointer' : 'cursor-default'} ${
+                              status === 'Onay' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}
+                          >
+                            {NOTE_STATUS_CONFIG[status]?.label || 'Eksik'}
+                          </span>
+                        )}
                       </td>
-                      <td className={`py-2 px-3 whitespace-nowrap ${isDark ? 'text-concrete-400' : 'text-gray-600'}`}>
+                      <td className="px-4 py-2 whitespace-nowrap text-gray-600 bg-white group-hover:bg-blue-50/50 min-w-[100px]">
                         <div className="flex items-center gap-1">
                           {canEditNote(note) && (
                             <button
                               onClick={() => handleEditNote(note)}
-                              className={`p-1.5 rounded transition-colors ${
-                                isDark ? 'hover:bg-slate-700 text-concrete-300' : 'hover:bg-gray-200 text-gray-600'
-                              }`}
+                              className="p-1.5 rounded transition-colors hover:bg-gray-200 text-gray-600"
                               title="Düzenle"
                             >
                               <Pencil className="w-3.5 h-3.5" />
@@ -497,7 +810,7 @@ const TablePage: React.FC = () => {
                           {canDeleteNote(note) && (
                             <button
                               onClick={() => handleDeleteNote(note)}
-                              className="p-1.5 rounded transition-colors hover:bg-red-500/20 text-red-400"
+                              className="p-1.5 rounded transition-colors hover:bg-red-100 text-red-600"
                               title="Sil"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -511,7 +824,6 @@ const TablePage: React.FC = () => {
               )}
             </tbody>
           </table>
-          </div>
         </div>
       </main>
 

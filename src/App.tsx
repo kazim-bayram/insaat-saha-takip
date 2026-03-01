@@ -9,12 +9,8 @@ import LoadingSpinner from './components/LoadingSpinner';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import { CheckCircle2 } from 'lucide-react';
 
-// Protect /table-view: redirect workers to home
-const AdminTableRoute: React.FC = () => {
-  const { userProfile } = useAuth();
-  if (userProfile?.role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
+// Table view: accessible to all authenticated users (admins and workers)
+const TableViewRoute: React.FC = () => {
   return <TablePage />;
 };
 
@@ -66,7 +62,7 @@ const App: React.FC = () => {
     <>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/table-view" element={<AdminTableRoute />} />
+        <Route path="/table-view" element={<TableViewRoute />} />
         <Route path="/form-builder" element={<AdminFormBuilderRoute />} />
       </Routes>
       {/* Toast: Şifre değiştirildi */}

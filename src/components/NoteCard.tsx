@@ -50,10 +50,10 @@ const NoteCard: React.FC<NoteCardProps> = ({
   
   const workDate = getWorkDate(note);
   const formattedDate = formatWorkDate(workDate);
-  const categoryValue = String(getNoteFieldValue(note, 'category') || note.category || '').trim();
+  const categoryValue = String(getNoteFieldValue(note, 'category') ?? note?.category ?? '').trim() || 'Belirtilmemiş';
 
   // Current status config (normalize legacy statuses)
-  const currentStatus = normalizeStatus(note.status);
+  const currentStatus = normalizeStatus(note?.status);
   const statusConfig = NOTE_STATUS_CONFIG[currentStatus];
 
   // Get images array with backward compatibility

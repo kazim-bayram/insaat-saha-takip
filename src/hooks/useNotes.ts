@@ -485,6 +485,66 @@ export const useNotes = () => {
     }
   };
 
+  /** Partial update for inline cell editing. Supports core fields and dynamic schema fields. */
+  const updateNoteField = useCallback(
+    async (noteId: string, fieldKey: string, newValue: string | number | undefined | null): Promise<void> => {
+      if (!currentUser) throw new Error('User not authenticated');
+
+      setError(null);
+
+      const coreFields = ['projectName', 'category', 'ada', 'parsel', 'date', 'progressLevel', 'status'] as const;
+      const isCore = coreFields.includes(fieldKey as (typeof coreFields)[number]);
+
+      const normalized = newValue === undefined || newValue === null ? '' : (fieldKey === 'status' ? String(newValue) : String(newValue).trim());
+
+      const noteRef = doc(db, 'notes', noteId);
+      const updatePayload: Record<string, unknown> = {
+        updatedAt: Timestamp.now(),
+        lastEditedBy: currentUser.uid,
+        lastEditedByName: userProfile?.displayName || ''
+      };
+
+      if (isCore) {
+        updatePayload[fieldKey] = fieldKey === 'date' ? normalized : (fieldKey === 'status' ? (normalized || 'Eksik') : normalized);
+      } else {
+        updatePayload[`data.${fieldKey}`] = normalized;
+      }
+
+      // Optimistic UI: update local state immediately
+      setNotes((prev) =>
+        prev.map((n) => {
+          if (n.id !== noteId) return n;
+          const updated = { ...n, updatedAt: Timestamp.now() };
+          if (isCore) {
+            (updated as Record<string, unknown>)[fieldKey] = updatePayload[fieldKey];
+          } else {
+            updated.data = { ...(n.data || {}), [fieldKey]: updatePayload[`data.${fieldKey}`] };
+          }
+          return updated;
+        })
+      );
+
+      try {
+        const docUpdate: Record<string, unknown> = {
+          updatedAt: updatePayload.updatedAt,
+          lastEditedBy: updatePayload.lastEditedBy,
+          lastEditedByName: updatePayload.lastEditedByName
+        };
+        if (isCore) {
+          docUpdate[fieldKey] = updatePayload[fieldKey];
+        } else {
+          docUpdate[`data.${fieldKey}`] = updatePayload[`data.${fieldKey}`];
+        }
+        await updateDoc(noteRef, docUpdate);
+      } catch (err) {
+        console.error('Error updating note field:', err);
+        setError('Failed to save. Please try again.');
+        throw err;
+      }
+    },
+    [currentUser, userProfile]
+  );
+
   // Check if user can edit a note
   const canEditNote = useCallback((note: Note): boolean => {
     if (!currentUser) return false;
@@ -507,6 +567,7 @@ export const useNotes = () => {
     uploadProgress,
     createNote,
     updateNote,
+    updateNoteField,
     deleteNote,
     updateNoteStatus,
     addComment,

@@ -14,7 +14,7 @@ const NOTE_SCHEMA_DOC_ID = 'note_schema';
 /** Default schema for backward compatibility with existing forms */
 export const DEFAULT_NOTE_SCHEMA: NoteSchema = {
   fields: [
-    { id: 'category', label: 'Kategori', type: 'select', required: true, options: ['Kaba İşler', 'İnce İşler', 'Elektrik', 'Mekanik', 'Peyzaj', 'İSG'], order: 0 },
+    { id: 'category', label: 'Kategori', type: 'select', required: true, options: ['Kaba İşler', 'İnce İşler', 'Elektrik', 'Mekanik', 'Peyzaj', 'İSG', 'Zabıt İzleme', 'Tebligat Takip', 'Kentsel Dönüşüm'], order: 0 },
     { id: 'date', label: 'Yapılan Tarih', type: 'date', required: true, order: 1 },
     { id: 'ada', label: 'Ada', type: 'text', required: false, placeholder: 'Örn: 123', order: 2 },
     { id: 'parsel', label: 'Parsel', type: 'text', required: false, placeholder: 'Örn: 5', order: 3 },

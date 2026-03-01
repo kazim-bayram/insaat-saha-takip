@@ -102,7 +102,7 @@ const Dashboard: React.FC = () => {
   // Role-based visibility: Workers see ONLY their own notes; Admins see ALL
   const visibleNotes = useMemo(() => {
     if (isAdmin) return filteredNotes;
-    return filteredNotes.filter(note => note.userId === currentUser?.uid);
+    return filteredNotes.filter(note => (note?.userId ?? null) === currentUser?.uid);
   }, [filteredNotes, isAdmin, currentUser?.uid]);
 
   // Filtre dropdown'ları için benzersiz değerler
@@ -228,22 +228,22 @@ const Dashboard: React.FC = () => {
 
             {/* Kullanıcı Bilgisi & Aksiyonlar */}
             <div className="flex items-center gap-2">
-              {/* Tablo Görünümü Link - Admin only */}
+              {/* Tablo Görünümü Link - All users (workers see category tabs only) */}
+              <Link
+                to="/table-view"
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isDark
+                    ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+                title="Tablo Görünümü"
+              >
+                <FileSpreadsheet className="w-5 h-5" />
+                <span className="hidden sm:inline">Tablo Görünümü</span>
+              </Link>
+              {/* Form Builder - Admin only */}
               {isAdmin && (
-                <>
-                  <Link
-                    to="/table-view"
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isDark
-                        ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                    title="Tablo Görünümü"
-                  >
-                    <FileSpreadsheet className="w-5 h-5" />
-                    <span className="hidden sm:inline">Tablo Görünümü</span>
-                  </Link>
-                  <Link
+                <Link
                     to="/form-builder"
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isDark
@@ -255,7 +255,6 @@ const Dashboard: React.FC = () => {
                     <Settings2 className="w-5 h-5" />
                     <span className="hidden sm:inline">Form Şeması</span>
                   </Link>
-                </>
               )}
 
               {/* User Profile Menu */}
