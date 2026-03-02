@@ -11,7 +11,7 @@ import {
   Layers
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { NoteFormData, Note, NoteStatus, UploadProgress, getNoteImages, normalizeStatus, FormField, FormFieldType, getNoteFieldValue } from '../types';
+import { NoteFormData, Note, NoteStatus, UploadProgress, getNoteImages, normalizeStatus, FormField, FormFieldType, getNoteFieldValue, normalizeCategoryKey } from '../types';
 import { useNoteSchema } from '../hooks/useNoteSchema';
 import { CATEGORY_SCHEMAS } from '../config/categorySchemas';
 
@@ -29,6 +29,8 @@ interface AddNoteModalProps {
 }
 
 const MAX_IMAGES = 4;
+
+const CATEGORIES = ['Hakediş', 'Şikayet', 'Seviye', 'Hafriyat', 'Kentsel Dönüşüm', 'Tebligat', 'Zabıt'] as const;
 
 const AddNoteModal: React.FC<AddNoteModalProps> = ({
   isOpen,
@@ -92,7 +94,11 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         (editNote?.data && typeof editNote.data === 'object' && typeof (editNote.data as Record<string, unknown>).category === 'string'
           ? (editNote.data as Record<string, unknown>).category
           : '');
-      setSelectedCategory(existingCategory || '');
+      const normalizedCategory = normalizeCategoryKey(existingCategory);
+      setSelectedCategory(normalizedCategory || '');
+      if (normalizedCategory && normalizedCategory !== existingCategory) {
+        setFormData((prev) => ({ ...prev, category: normalizedCategory }));
+      }
     } else {
       const initial: Record<string, any> = {};
       fields.forEach((f) => {
@@ -461,10 +467,18 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
               </div>
             ) : (
               fields.map((field) => {
+                const isCategoryField = field.id === 'category';
+                const effectiveField = isCategoryField
+                  ? {
+                      ...field,
+                      options: [...CATEGORIES]
+                    }
+                  : field;
+
                 const fieldNode = (
                   <DynamicFieldInput
                     key={field.id}
-                    field={field}
+                    field={effectiveField}
                     value={
                       formData[field.id] ??
                       (field.type === 'checkbox'
@@ -480,7 +494,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                   />
                 );
 
-                if (field.id !== 'category') {
+                if (!isCategoryField) {
                   return fieldNode;
                 }
 
@@ -570,6 +584,35 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
                                     type="date"
                                     value={typeof value === 'string' ? value : ''}
                                     onChange={(e) => setFieldValue(catField.id, e.target.value)}
+                                    className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
+                                      isDark
+                                        ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange'
+                                        : 'bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-safety-orange'
+                                    }`}
+                                  />
+                                </div>
+                              );
+                            }
+
+                            if (catField.type === 'number') {
+                              return (
+                                <div key={catField.id}>
+                                  <label
+                                    className={`block text-sm font-medium mb-1 ${
+                                      isDark ? 'text-concrete-300' : 'text-gray-700'
+                                    }`}
+                                  >
+                                    {catField.label}
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={value ?? ''}
+                                    onChange={(e) =>
+                                      setFieldValue(
+                                        catField.id,
+                                        e.target.value === '' ? '' : Number(e.target.value)
+                                      )
+                                    }
                                     className={`w-full rounded-xl px-4 py-3 transition-all focus:outline-none focus:ring-2 focus:ring-safety-orange/20 ${
                                       isDark
                                         ? 'bg-slate-900/50 border border-slate-600 text-white placeholder-concrete-500 focus:border-safety-orange'

@@ -15,7 +15,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotes } from '../hooks/useNotes';
 import { useNoteSchema } from '../hooks/useNoteSchema';
-import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate, getNoteFieldValue, CATEGORY_OPTIONS } from '../types';
+import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate, getNoteFieldValue, CATEGORY_OPTIONS, normalizeCategoryKey } from '../types';
 import { CATEGORY_SCHEMAS, ZABIT_CATEGORY, TEBLIGAT_CATEGORY, KENTSEL_CATEGORY } from '../config/categorySchemas';
 import AddNoteModal from '../components/AddNoteModal';
 import NoteDetailModal from '../components/NoteDetailModal';
@@ -47,9 +47,7 @@ const TablePage: React.FC = () => {
   const schemaFields = [...(schema?.fields ?? [])].sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0));
 
   const isWorker = userProfile?.role === 'worker';
-  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
-    isWorker ? 'zabit' : 'genel'
-  );
+  const [activeTab, setActiveTab] = useState<ActiveTab>('genel');
 
   const zabitFieldIds = useMemo(() => CATEGORY_SCHEMAS[ZABIT_CATEGORY]?.map((f) => f.id) ?? [], []);
   const tebligatFieldIds = useMemo(() => CATEGORY_SCHEMAS[TEBLIGAT_CATEGORY]?.map((f) => f.id) ?? [], []);
@@ -160,13 +158,23 @@ const TablePage: React.FC = () => {
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
 
+  const topScrollRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const [dummyScrollWidth, setDummyScrollWidth] = useState(1000);
+
   const canEditInline = isAdmin;
 
-  useEffect(() => {
-    if (isWorker && activeTab === 'genel') {
-      setActiveTab('zabit');
+  const handleTopScroll = () => {
+    if (tableScrollRef.current && topScrollRef.current) {
+      tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
     }
-  }, [isWorker, activeTab]);
+  };
+
+  const handleTableScroll = () => {
+    if (topScrollRef.current && tableScrollRef.current) {
+      topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+  };
 
   // Apply tab-based category filter first, then column filters (AND logic, case-insensitive)
   const filteredNotes = useMemo(() => {
@@ -174,22 +182,26 @@ const TablePage: React.FC = () => {
 
     if (activeTab === 'genel') {
       base = notes.filter((n) => {
-        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const rawCat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const cat = normalizeCategoryKey(rawCat);
         return cat !== ZABIT_CATEGORY && cat !== TEBLIGAT_CATEGORY && cat !== KENTSEL_CATEGORY;
       });
     } else if (activeTab === 'zabit') {
       base = notes.filter((n) => {
-        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const rawCat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const cat = normalizeCategoryKey(rawCat);
         return cat === ZABIT_CATEGORY;
       });
     } else if (activeTab === 'tebligat') {
       base = notes.filter((n) => {
-        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const rawCat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const cat = normalizeCategoryKey(rawCat);
         return cat === TEBLIGAT_CATEGORY;
       });
     } else if (activeTab === 'kentsel') {
       base = notes.filter((n) => {
-        const cat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const rawCat = String(getNoteFieldValue(n, 'category') || n.category || '').trim();
+        const cat = normalizeCategoryKey(rawCat);
         return cat === KENTSEL_CATEGORY;
       });
     }
@@ -199,7 +211,8 @@ const TablePage: React.FC = () => {
       const projectMatch = !filters.project || String(note?.projectName ?? '').toLowerCase().includes(String(filters.project ?? '').toLowerCase());
       const adaParselStr = `${getNoteFieldValue(note, 'ada') || ''}/${getNoteFieldValue(note, 'parsel') || ''}`.toLowerCase();
       const adaParselMatch = !filters.adaParsel || adaParselStr.includes(filters.adaParsel.toLowerCase());
-      const categoryVal = String(getNoteFieldValue(note, 'category') || '');
+      const categoryValRaw = String(getNoteFieldValue(note, 'category') || note.category || '');
+      const categoryVal = normalizeCategoryKey(categoryValRaw);
       const categoryMatch = !filters.category || categoryVal.toLowerCase().includes(filters.category.toLowerCase());
       const progressVal = String(getNoteFieldValue(note, 'progressLevel') || '');
       const progressMatch = !filters.progress || progressVal.toLowerCase().includes(filters.progress.toLowerCase());
@@ -256,6 +269,114 @@ const TablePage: React.FC = () => {
     }
   };
 
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+  const parseYMDToUTCDate = (dateStr: string | null | undefined): Date | null => {
+    if (!dateStr) return null;
+    const parts = String(dateStr).split('-');
+    if (parts.length !== 3) return null;
+    const [y, m, d] = parts.map((p) => Number(p));
+    if (!y || !m || !d) return null;
+    return new Date(Date.UTC(y, m - 1, d));
+  };
+
+  const checkIfExpired = (
+    startDateStr: string | null | undefined,
+    daysToAdd: number | string | null | undefined
+  ): boolean => {
+    if (startDateStr == null || daysToAdd == null || daysToAdd === '') return false;
+    const startDate = parseYMDToUTCDate(startDateStr);
+    if (!startDate) return false;
+    const parsedDays =
+      typeof daysToAdd === 'string' ? parseInt(daysToAdd, 10) : Number(daysToAdd);
+    if (!Number.isFinite(parsedDays)) return false;
+
+    const deadline = new Date(startDate.getTime() + parsedDays * MS_PER_DAY);
+    const now = new Date();
+    const todayUtc = new Date(
+      Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+    );
+    return todayUtc.getTime() > deadline.getTime();
+  };
+
+  const getDaysLeft = (
+    startDateStr: string | null | undefined,
+    daysToAdd: number | string | null | undefined
+  ): number | null => {
+    if (startDateStr == null || daysToAdd == null || daysToAdd === '') return null;
+    const startDate = parseYMDToUTCDate(startDateStr);
+    if (!startDate) return null;
+    const parsedDays =
+      typeof daysToAdd === 'string' ? parseInt(daysToAdd, 10) : Number(daysToAdd);
+    if (!Number.isFinite(parsedDays)) return null;
+
+    const deadline = new Date(startDate.getTime() + parsedDays * MS_PER_DAY);
+    const now = new Date();
+    const todayUtc = new Date(
+      Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+    );
+    const diffMs = deadline.getTime() - todayUtc.getTime();
+    return Math.ceil(diffMs / MS_PER_DAY);
+  };
+
+  const renderDeadlineWarning = (note: Note) => {
+    if (activeTab !== 'tebligat' && activeTab !== 'kentsel') return null;
+
+    const startFieldId = activeTab === 'tebligat' ? 'teblig_tarihi' : 'karar_tarihi';
+    const startDateVal = getNoteFieldValue(note, startFieldId);
+    const sureGunVal = getNoteFieldValue(note, 'sure_gun');
+
+    if (startDateVal == null || sureGunVal == null || sureGunVal === '') return null;
+
+    const startDateStr = String(startDateVal);
+    const isExpired = checkIfExpired(startDateStr, sureGunVal);
+
+    if (isExpired) {
+      return (
+        <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full animate-pulse">
+          ⏳ Süre Doldu!
+        </span>
+      );
+    }
+
+    const daysLeft = getDaysLeft(startDateStr, sureGunVal);
+    if (daysLeft !== null && daysLeft <= 2 && daysLeft >= 0) {
+      return (
+        <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full">
+          ⏳ {daysLeft === 0 ? 'Son Gün' : `${daysLeft} gün kaldı`}
+        </span>
+      );
+    }
+
+    return null;
+  };
+
+  useEffect(() => {
+    const container = tableScrollRef.current;
+    if (!container) return;
+
+    const updateWidth = () => {
+      const tableEl = container.querySelector('table') as HTMLTableElement | null;
+      const width = tableEl?.scrollWidth || container.scrollWidth || 1000;
+      setDummyScrollWidth(width);
+    };
+
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateWidth();
+    });
+
+    const tableEl = container.querySelector('table') as HTMLElement | null;
+    if (tableEl) {
+      resizeObserver.observe(tableEl);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [displayNotes, tabDisplayFields, activeTab]);
+
   const handleExport = useCallback(() => {
     const getStatusLabel = (s: string) => NOTE_STATUS_CONFIG[normalizeStatus(s)]?.label || 'Eksik';
     const adaVal = (n: Note) => getNoteFieldValue(n, 'ada');
@@ -285,8 +406,22 @@ const TablePage: React.FC = () => {
       return base as Record<string, string | number>;
     });
 
-    const sheetName = activeTab === 'genel' ? 'Genel Raporu' : activeTab === 'zabit' ? 'Zabıt İzleme' : activeTab === 'tebligat' ? 'Tebligat Takip' : 'Kentsel Donusum';
-    const fileName = activeTab === 'genel' ? 'Saha_Takip_Raporu' : activeTab === 'zabit' ? 'Zabit_Izleme_Raporu' : activeTab === 'tebligat' ? 'Tebligat_Takip_Raporu' : 'Kentsel_Donusum_Raporu';
+    const sheetName =
+      activeTab === 'genel'
+        ? 'Genel Raporu'
+        : activeTab === 'zabit'
+        ? 'Zabıt'
+        : activeTab === 'tebligat'
+        ? 'Tebligat'
+        : 'Kentsel Dönüşüm';
+    const fileName =
+      activeTab === 'genel'
+        ? 'Saha_Takip_Raporu'
+        : activeTab === 'zabit'
+        ? 'Zabit_Raporu'
+        : activeTab === 'tebligat'
+        ? 'Tebligat_Raporu'
+        : 'Kentsel_Donusum_Raporu';
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const colWidths = [
       { wch: 5 }, { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 8 },
@@ -393,7 +528,7 @@ const TablePage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 justify-end">
               {isAdmin && (
                 <Link
                   to="/form-builder"
@@ -439,19 +574,17 @@ const TablePage: React.FC = () => {
         )}
 
         {/* Tab Navigation */}
-        <div className="flex space-x-4 border-b border-gray-200 mb-4">
-          {!isWorker && (
-            <button
-              onClick={() => setActiveTab('genel')}
-              className={`pb-3 px-1 text-sm font-medium transition-colors ${
-                activeTab === 'genel'
-                  ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              📁 Genel Tablo
-            </button>
-          )}
+        <div className="flex space-x-4 border-b border-gray-200 mb-4 overflow-x-auto whitespace-nowrap scrollbar-none">
+          <button
+            onClick={() => setActiveTab('genel')}
+            className={`pb-3 px-1 text-sm font-medium transition-colors ${
+              activeTab === 'genel'
+                ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            📁 Genel Tablo
+          </button>
           <button
             onClick={() => setActiveTab('zabit')}
             className={`pb-3 px-1 text-sm font-medium transition-colors ${
@@ -460,7 +593,7 @@ const TablePage: React.FC = () => {
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            ⚖️ Zabıt İzleme
+            ⚖️ Zabıt
           </button>
           <button
             onClick={() => setActiveTab('tebligat')}
@@ -470,7 +603,7 @@ const TablePage: React.FC = () => {
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            📄 Tebligat Takip
+            📄 Tebligat
           </button>
           <button
             onClick={() => setActiveTab('kentsel')}
@@ -484,13 +617,29 @@ const TablePage: React.FC = () => {
           </button>
         </div>
 
-        <div className="w-full overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white">
+        {/* Top Dummy Scrollbar */}
+        <div
+          ref={topScrollRef}
+          onScroll={handleTopScroll}
+          className="w-full overflow-x-auto overflow-y-hidden h-4 mb-1"
+        >
+          <div style={{ width: dummyScrollWidth }} className="h-full" />
+        </div>
+
+        {/* Actual Table Container */}
+        <div
+          ref={tableScrollRef}
+          onScroll={handleTableScroll}
+          className="w-full overflow-x-auto bg-white border border-gray-200 rounded-lg shadow-sm"
+        >
           <table className="w-full text-left border-collapse min-w-max text-sm">
               <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700 border-b-2 border-gray-300">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap">#</th>
+                  <th className="sticky left-0 bg-gray-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap">
+                    #
+                  </th>
                   <th
-                    className="sticky left-0 z-20 px-4 py-3 text-left font-semibold border-r border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 select-none whitespace-nowrap shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)] min-w-[200px]"
+                    className="px-4 py-3 text-left font-semibold border-r border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 select-none whitespace-nowrap min-w-[200px]"
                     onClick={() => handleSort('projectName')}
                   >
                     <span className="flex items-center gap-1">
@@ -520,12 +669,17 @@ const TablePage: React.FC = () => {
                       </span>
                     </th>
                   )}
+                  {(activeTab === 'tebligat' || activeTab === 'kentsel') && (
+                    <th className="px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap min-w-[130px]">
+                      Durum Uyarı
+                    </th>
+                  )}
                   <th className="px-4 py-3 text-left font-semibold border-r border-gray-200 whitespace-nowrap min-w-[90px]">Durum</th>
                   <th className="px-4 py-3 text-left font-semibold whitespace-nowrap min-w-[100px]">İşlemler</th>
                 </tr>
                 <tr className="bg-gray-100/80 text-gray-800 border-b border-gray-200">
-                  <th className="px-4 py-3 border-r border-gray-200 whitespace-nowrap" />
-                  <th className="sticky left-0 z-20 px-4 py-3 border-r border-gray-200 bg-gray-100/80 whitespace-nowrap shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                  <th className="sticky left-0 bg-gray-100/80 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] px-4 py-3 border-r border-gray-200 whitespace-nowrap" />
+                  <th className="px-4 py-3 border-r border-gray-200 bg-gray-100/80 whitespace-nowrap">
                     <input
                       type="text"
                       value={filters.project}
@@ -617,6 +771,9 @@ const TablePage: React.FC = () => {
                       />
                     </th>
                   )}
+                  {(activeTab === 'tebligat' || activeTab === 'kentsel') && (
+                    <th className="px-4 py-3 border-r border-gray-200 whitespace-nowrap" />
+                  )}
                   <th className="px-4 py-3 border-r border-gray-200 whitespace-nowrap">
                     <select
                       value={filters.status}
@@ -634,7 +791,15 @@ const TablePage: React.FC = () => {
               <tbody>
               {displayNotes.length === 0 ? (
                 <tr>
-                  <td colSpan={6 + tabDisplayFields.length + (tabDisplayFields.some((f) => f.id === 'date') ? 0 : 1)} className="px-4 py-8 text-center whitespace-normal text-gray-500 bg-white">
+                  <td
+                    colSpan={
+                      6 +
+                      tabDisplayFields.length +
+                      (tabDisplayFields.some((f) => f.id === 'date') ? 0 : 1) +
+                      (activeTab === 'tebligat' || activeTab === 'kentsel' ? 1 : 0)
+                    }
+                    className="px-4 py-8 text-center whitespace-normal text-gray-500 bg-white"
+                  >
                     Henüz not bulunmuyor
                   </td>
                 </tr>
@@ -648,10 +813,10 @@ const TablePage: React.FC = () => {
                       key={note.id}
                       className="group border-t border-gray-200 bg-white hover:bg-blue-50/50 transition-colors"
                     >
-                      <td className="px-4 py-2 font-mono whitespace-nowrap text-gray-600 border-r border-gray-200">
+                      <td className="sticky left-0 bg-white group-hover:bg-blue-50/50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] px-4 py-2 font-mono whitespace-nowrap text-gray-600 border-r border-gray-200">
                         {idx + 1}
                       </td>
-                      <td className="sticky left-0 z-[5] px-4 py-2 border-r border-gray-200 bg-white group-hover:bg-blue-50/50 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.06)] whitespace-nowrap min-w-[200px]">
+                      <td className="px-4 py-2 border-r border-gray-200 bg-white group-hover:bg-blue-50/50 whitespace-nowrap min-w-[200px]">
                         {isEditingProject && canEditInline && canEditNote(note) ? (
                           <input
                             ref={editInputRef as React.RefObject<HTMLInputElement>}
@@ -769,6 +934,11 @@ const TablePage: React.FC = () => {
                       {!tabDisplayFields.some((f) => f.id === 'date') && (
                         <td className="px-4 py-2 border-r border-gray-200 font-mono whitespace-nowrap text-gray-700 min-w-[110px]">
                           {formatWorkDate(getWorkDate(note))}
+                        </td>
+                      )}
+                      {(activeTab === 'tebligat' || activeTab === 'kentsel') && (
+                        <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap min-w-[130px]">
+                          {renderDeadlineWarning(note)}
                         </td>
                       )}
                       <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap min-w-[90px]">

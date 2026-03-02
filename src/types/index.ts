@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import { ZABIT_CATEGORY, TEBLIGAT_CATEGORY, KENTSEL_CATEGORY } from '../config/categorySchemas';
 
 export type UserRole = 'admin' | 'worker';
 
@@ -162,15 +163,25 @@ export interface NoteFormDataDynamic {
   data: Record<string, any>;
 }
 
-// Suggested category options for AddNoteModal
+// Suggested category options for inline editing in the table
 export const CATEGORY_OPTIONS = [
-  'Kaba İşler',
-  'İnce İşler',
-  'Elektrik',
-  'Mekanik',
-  'Peyzaj',
-  'İSG'
+  'Hakediş',
+  'Şikayet',
+  'Seviye',
+  'Hafriyat',
+  KENTSEL_CATEGORY,
+  TEBLIGAT_CATEGORY,
+  ZABIT_CATEGORY
 ];
+
+/** Normalize legacy and short category names to the canonical keys used in CATEGORY_SCHEMAS/tables. */
+export const normalizeCategoryKey = (category: string | null | undefined): string => {
+  const raw = (category || '').trim();
+  if (!raw) return '';
+  if (raw === 'Zabıt İzleme') return ZABIT_CATEGORY;
+  if (raw === 'Tebligat Takip') return TEBLIGAT_CATEGORY;
+  return raw;
+};
 
 // Helper: get work date for display (date or createdAt fallback for legacy notes)
 export const getWorkDate = (note: Note): string => {
