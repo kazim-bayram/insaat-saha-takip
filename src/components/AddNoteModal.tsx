@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { NoteFormData, Note, NoteStatus, UploadProgress, getNoteImages, normalizeStatus, FormField, FormFieldType, getNoteFieldValue, normalizeCategoryKey } from '../types';
+import { processImageBeforeUpload } from '../utils/imageUtils';
 import { useNoteSchema } from '../hooks/useNoteSchema';
 import { CATEGORY_SCHEMAS } from '../config/categorySchemas';
 
@@ -166,7 +167,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     }
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const currentCount = imagePreviews.length + existingImages.length;
@@ -177,17 +178,26 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     }
     const newPreviews: ImagePreview[] = [];
     const errors: string[] = [];
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith('image/')) {
-        errors.push(`${file.name}: Geçersiz dosya türü`);
-        return;
+    for (const originalFile of Array.from(files)) {
+      try {
+        if (!originalFile.type.startsWith('image/')) {
+          errors.push(`${originalFile.name}: Geçersiz dosya türü`);
+          continue;
+        }
+        if (originalFile.size > 10 * 1024 * 1024) {
+          errors.push(`${originalFile.name}: 10MB'dan büyük`);
+          continue;
+        }
+
+        const processedFile = await processImageBeforeUpload(originalFile);
+        newPreviews.push({ file: processedFile, previewUrl: URL.createObjectURL(processedFile) });
+      } catch (conversionError) {
+        console.error('Resim işlenirken hata oluştu', conversionError);
+        errors.push(
+          `${originalFile.name}: HEIC formatı dönüştürülemedi, lütfen farklı bir format yükleyin.`
+        );
       }
-      if (file.size > 10 * 1024 * 1024) {
-        errors.push(`${file.name}: 10MB'dan büyük`);
-        return;
-      }
-      newPreviews.push({ file, previewUrl: URL.createObjectURL(file) });
-    });
+    }
     if (errors.length > 0) setError(errors.join(', '));
     else setError(null);
     if (newPreviews.length > 0) setImagePreviews((prev) => [...prev, ...newPreviews]);
