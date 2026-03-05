@@ -1,3 +1,5 @@
+import heic2any from 'heic2any';
+
 export async function processImageBeforeUpload(file: File): Promise<File> {
   const contentType = file.type.toLowerCase();
   const fileName = file.name.toLowerCase();
@@ -10,9 +12,6 @@ export async function processImageBeforeUpload(file: File): Promise<File> {
   }
 
   try {
-    const heic2anyModule = await import('heic2any');
-    const heic2any = (heic2anyModule as typeof import('heic2any')).default;
-
     const converted = await heic2any({
       blob: file,
       toType: 'image/jpeg',
