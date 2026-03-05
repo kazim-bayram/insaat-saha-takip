@@ -158,11 +158,9 @@ const Dashboard: React.FC = () => {
       }
     };
 
-    toast.success('Not arka planda yükleniyor...', { icon: '⏳' });
     void backgroundTask();
 
     setEditingNote(null);
-    setShowAddModal(false);
   };
 
   const handleCloseAddModal = () => {

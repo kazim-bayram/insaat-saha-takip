@@ -16,6 +16,7 @@ import { NoteFormData, Note, NoteStatus, UploadProgress, getNoteImages, normaliz
 import { processImageBeforeUpload } from '../utils/imageUtils';
 import { useNoteSchema } from '../hooks/useNoteSchema';
 import { CATEGORY_SCHEMAS } from '../config/categorySchemas';
+import toast from 'react-hot-toast';
 
 interface ImagePreview {
   file: File;
@@ -260,7 +261,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-    setLoadingText('');
+    setLoadingText('Fotoğraflar işleniyor...');
     try {
       const filesToProcess = imagePreviews.map((p) => p.file);
       const options = {
@@ -269,11 +270,28 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         useWebWorker: true
       };
 
-      setLoadingText('Fotoğraf formatı dönüştürülüyor ve sıkıştırılıyor...');
+      // Foreground processing: HEIC detection + conversion + compression
       const processedFiles = await Promise.all(
         filesToProcess.map(async (file) => {
-          const converted = await processImageBeforeUpload(file);
-          const compressed = await imageCompression(converted, options);
+          const lowerName = file.name.toLowerCase();
+          const isHeic =
+            file.type === 'image/heic' ||
+            lowerName.endsWith('.heic') ||
+            lowerName.endsWith('.heif');
+
+          let toCompress: File = file;
+
+          if (isHeic) {
+            try {
+              toCompress = await processImageBeforeUpload(file);
+            } catch (conversionError) {
+              console.error('HEIC dönüştürme hatası:', conversionError);
+              toast.error('HEIC dönüştürme hatası. Lütfen resmi normal JPEG çekin.');
+              throw conversionError;
+            }
+          }
+
+          const compressed = await imageCompression(toCompress, options);
           return compressed;
         })
       );
@@ -286,7 +304,13 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         data: { ...formData },
         category: typeof formData.category === 'string' ? formData.category : undefined
       };
-      await onSubmit(payload, existingImages.length > 0 ? existingImages : undefined);
+      const existing = existingImages.length > 0 ? [...existingImages] : undefined;
+
+      // Start background upload (parent handles Firestore/Storage and final toasts)
+      onSubmit(payload, existing);
+
+      toast.success('Fotoğraflar işlendi, arka planda yükleniyor...', { icon: '🚀' });
+
       resetForm();
       onClose();
     } catch (err) {
