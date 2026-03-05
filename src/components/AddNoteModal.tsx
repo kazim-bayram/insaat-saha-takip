@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import imageCompression from 'browser-image-compression';
 import {
   X,
   Camera,
@@ -49,8 +50,9 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingText, setLoadingText] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -189,8 +191,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
           continue;
         }
 
-        const processedFile = await processImageBeforeUpload(originalFile);
-        newPreviews.push({ file: processedFile, previewUrl: URL.createObjectURL(processedFile) });
+        newPreviews.push({ file: originalFile, previewUrl: URL.createObjectURL(originalFile) });
       } catch (conversionError) {
         console.error('Resim işlenirken hata oluştu', conversionError);
         errors.push(
@@ -254,17 +255,34 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError(null);
     if (!validateForm()) return;
 
-    setSubmitting(true);
+    setIsSubmitting(true);
+    setLoadingText('');
     try {
-      const imageFiles = imagePreviews.map((p) => p.file);
+      const filesToProcess = imagePreviews.map((p) => p.file);
+      const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true
+      };
+
+      setLoadingText('Fotoğraf formatı dönüştürülüyor ve sıkıştırılıyor...');
+      const processedFiles = await Promise.all(
+        filesToProcess.map(async (file) => {
+          const converted = await processImageBeforeUpload(file);
+          const compressed = await imageCompression(converted, options);
+          return compressed;
+        })
+      );
+
       const payload: NoteFormData = {
         content: content.trim(),
         projectName: projectName.trim(),
         status,
-        images: imageFiles,
+        images: processedFiles,
         data: { ...formData },
         category: typeof formData.category === 'string' ? formData.category : undefined
       };
@@ -274,12 +292,13 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Not kaydedilemedi');
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false);
+      setLoadingText('');
     }
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !submitting) onClose();
+    if (e.target === e.currentTarget && !isSubmitting) onClose();
   };
 
   const totalImages = imagePreviews.length + existingImages.length;
@@ -306,7 +325,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
           </h2>
           <button
             onClick={onClose}
-            disabled={submitting}
+            disabled={isSubmitting}
             className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
               isDark ? 'text-concrete-400 hover:text-white hover:bg-slate-700/50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
             }`}
@@ -316,6 +335,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-140px)]">
+          <fieldset disabled={isSubmitting}>
           <div className="p-4 space-y-5">
             {error && (
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3">
@@ -719,7 +739,7 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              disabled={submitting}
+              disabled={isSubmitting}
               className={`flex-1 px-6 py-4 border rounded-xl font-medium transition-colors disabled:opacity-50 ${
                 isDark ? 'border-slate-600 text-concrete-300 hover:text-white hover:bg-slate-700/50' : 'border-gray-300 text-gray-600 hover:text-gray-800 hover:bg-gray-100'
               }`}
@@ -728,19 +748,20 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={isSubmitting}
               className="flex-1 px-6 py-4 bg-gradient-to-r from-safety-orange to-safety-orange-dark hover:from-safety-orange-dark hover:to-safety-orange text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
             >
-              {submitting ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Kaydediliyor...
+                  {loadingText || 'Kaydediliyor...'}
                 </>
               ) : (
                 editNote ? 'Notu Güncelle' : 'Notu Kaydet'
               )}
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
     </div>

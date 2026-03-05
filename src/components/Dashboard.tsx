@@ -28,6 +28,7 @@ import ProfileSettings from './ProfileSettings';
 import UserManagement from './UserManagement';
 import UserProfileMenu from './UserProfileMenu';
 import LoadingSpinner, { NotesGridSkeleton } from './LoadingSpinner';
+import toast from 'react-hot-toast';
 
 const Dashboard: React.FC = () => {
   const { logout, isAdmin, currentUser } = useAuth();
@@ -127,18 +128,41 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleSubmitNote = async (formData: NoteFormData, existingImageUrls?: string[]) => {
-    if (editingNote) {
-      await updateNote(
-        editingNote.id, 
-        formData, 
-        formData.images.length > 0 ? formData.images : undefined,
-        existingImageUrls
-      );
-    } else {
-      await createNote(formData);
-    }
+  const handleSubmitNote = (formData: NoteFormData, existingImageUrls?: string[]) => {
+    const payload: NoteFormData = {
+      ...formData,
+      content: formData.content?.trim() ?? '',
+      projectName: formData.projectName?.trim() ?? '',
+      images: [...(formData.images ?? [])]
+    };
+
+    const existing = existingImageUrls ? [...existingImageUrls] : undefined;
+    const noteToEdit = editingNote ? { ...editingNote } : null;
+
+    const backgroundTask = async () => {
+      try {
+        if (noteToEdit) {
+          await updateNote(
+            noteToEdit.id,
+            payload,
+            payload.images.length > 0 ? payload.images : undefined,
+            existing
+          );
+        } else {
+          await createNote(payload);
+        }
+        toast.success('Not başarıyla eklendi! ✅');
+      } catch (err) {
+        console.error('Not yüklenirken hata:', err);
+        toast.error('Yükleme başarısız oldu. Lütfen tekrar deneyin.');
+      }
+    };
+
+    toast.success('Not arka planda yükleniyor...', { icon: '⏳' });
+    void backgroundTask();
+
     setEditingNote(null);
+    setShowAddModal(false);
   };
 
   const handleCloseAddModal = () => {

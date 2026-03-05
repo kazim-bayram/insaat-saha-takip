@@ -9,6 +9,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import InstallPrompt from './components/InstallPrompt';
 import { CheckCircle2 } from 'lucide-react';
+import { Toaster } from 'react-hot-toast';
 
 // Table view: accessible to all authenticated users (admins and workers)
 const TableViewRoute: React.FC = () => {
@@ -67,6 +68,12 @@ const App: React.FC = () => {
         <Route path="/form-builder" element={<AdminFormBuilderRoute />} />
       </Routes>
       <InstallPrompt />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000
+        }}
+      />
       {/* Toast: Şifre değiştirildi */}
       {showPasswordChangeToast && (
         <div className="fixed bottom-4 right-4 z-[110] flex items-center gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/30 shadow-lg animate-slide-up">
