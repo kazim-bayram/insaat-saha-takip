@@ -25,6 +25,23 @@ import { useAuth } from '../contexts/AuthContext';
 // Generate unique ID for comments
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+// Convert createdAt (Firestore Timestamp | Date | ISO string) to a comparable number
+const getCreatedAtMs = (note: Note): number => {
+  const value = note.createdAt as unknown;
+  if (!value) return 0;
+  if (value instanceof Timestamp) return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object' && value !== null && 'seconds' in value) {
+    return (value as { seconds: number }).seconds * 1000;
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+// Default ordering everywhere: newest added first
+export const sortByNewestFirst = (list: Note[]): Note[] =>
+  [...list].sort((a, b) => getCreatedAtMs(b) - getCreatedAtMs(a));
+
 export const useNotes = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,14 +65,14 @@ export const useNotes = () => {
     let q;
 
     if (isAdmin) {
-      // Admin can see all notes
-      q = query(notesRef, orderBy('createdAt', 'asc'));
+      // Admin can see all notes (newest first)
+      q = query(notesRef, orderBy('createdAt', 'desc'));
     } else {
-      // Workers can only see their own notes
+      // Workers can only see their own notes (newest first)
       q = query(
         notesRef,
         where('userId', '==', currentUser.uid),
-        orderBy('createdAt', 'asc')
+        orderBy('createdAt', 'desc')
       );
     }
 
@@ -70,7 +87,8 @@ export const useNotes = () => {
             ...doc.data()
           } as Note);
         });
-        setNotes(notesData);
+        // Safety net for legacy docs without a usable createdAt
+        setNotes(sortByNewestFirst(notesData));
         setLoading(false);
         setError(null);
       },

@@ -13,7 +13,7 @@ import {
 import { Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNotes } from '../hooks/useNotes';
+import { useNotes, sortByNewestFirst } from '../hooks/useNotes';
 import { useNoteSchema } from '../hooks/useNoteSchema';
 import { Note, NoteFormData, normalizeStatus, NOTE_STATUS_CONFIG, getWorkDate, formatWorkDate, getNoteFieldValue, CATEGORY_OPTIONS, normalizeCategoryKey } from '../types';
 import { CATEGORY_SCHEMAS, ZABIT_CATEGORY, TEBLIGAT_CATEGORY, KENTSEL_CATEGORY } from '../config/categorySchemas';
@@ -235,9 +235,9 @@ const TablePage: React.FC = () => {
     });
   }, [notes, activeTab, filters, filterDate, tabDisplayFields, dynamicFilters, zabitFieldIds, tebligatFieldIds, isWorker, currentUser]);
 
-  // Sort filtered notes
+  // Sort filtered notes (default: newest added first)
   const displayNotes = useMemo(() => {
-    let list = [...filteredNotes];
+    let list = sortByNewestFirst(filteredNotes);
     if (sortField) {
       list.sort((a, b) => {
         let aVal: string | number = '';
