@@ -68,11 +68,12 @@ export const useNotes = () => {
       // Admin can see all notes (newest first)
       q = query(notesRef, orderBy('createdAt', 'desc'));
     } else {
-      // Workers can only see their own notes (newest first)
+      // Workers can only see their own notes.
+      // No orderBy here: where + orderBy needs a composite Firestore index.
+      // Sorting (newest first) is done client-side via sortByNewestFirst below.
       q = query(
         notesRef,
-        where('userId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc')
+        where('userId', '==', currentUser.uid)
       );
     }
 
