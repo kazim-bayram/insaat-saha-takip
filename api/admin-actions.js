@@ -14,6 +14,76 @@ import admin from 'firebase-admin';
 let auth;
 let db;
 
+/**
+ * Escape raw control characters (e.g. real newlines in private_key) that appear inside JSON strings
+ */
+function escapeControlCharsInStrings(text) {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (inString) {
+      if (escaped) { escaped = false; out += ch; continue; }
+      if (ch === '\\') { escaped = true; out += ch; continue; }
+      if (ch === '"') { inString = false; out += ch; continue; }
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+      out += ch;
+    } else {
+      if (ch === '"') inString = true;
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/**
+ * Parse the service account env var, tolerating common copy/paste formats:
+ * wrapped in quotes, base64-encoded, or with real newlines inside private_key.
+ */
+function parseServiceAccount(raw) {
+  const original = raw.trim();
+  let text = original;
+
+  // Strip wrapping single/double quotes
+  if ((text.startsWith("'") && text.endsWith("'")) || (text.startsWith('"') && text.endsWith('"') && !text.startsWith('{'))) {
+    text = text.slice(1, -1).trim();
+  }
+
+  const candidates = [original, text];
+
+  // Base64-encoded JSON
+  if (!text.startsWith('{')) {
+    try {
+      const decoded = Buffer.from(text, 'base64').toString('utf8').trim();
+      if (decoded.startsWith('{')) candidates.push(decoded);
+    } catch { /* ignore */ }
+  }
+
+  for (const candidate of candidates) {
+    for (const attempt of [candidate, escapeControlCharsInStrings(candidate)]) {
+      try {
+        let parsed = JSON.parse(attempt);
+        // Double-encoded JSON string
+        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch { /* try next */ }
+    }
+  }
+
+  // Log a safe hint only (never the key contents)
+  console.error('FIREBASE_SERVICE_ACCOUNT_KEY parse failed', {
+    length: raw.length,
+    firstChar: JSON.stringify(raw.trim().charAt(0)),
+    lastChar: JSON.stringify(raw.trim().slice(-1)),
+  });
+  throw new Error(
+    'Sunucu yapılandırması hatalı: FIREBASE_SERVICE_ACCOUNT_KEY geçerli JSON değil. ' +
+    'Vercel\'de değeri, Firebase\'den indirilen .json dosyasının içeriğinin tamamı ({ ile başlayıp } ile biten) olacak şekilde girin.'
+  );
+}
+
 function initAdmin() {
   if (auth && db) return;
 
@@ -23,12 +93,7 @@ function initAdmin() {
       throw new Error('Sunucu yapılandırması eksik: FIREBASE_SERVICE_ACCOUNT_KEY tanımlı değil');
     }
 
-    let serviceAccount;
-    try {
-      serviceAccount = JSON.parse(raw);
-    } catch {
-      throw new Error('Sunucu yapılandırması hatalı: FIREBASE_SERVICE_ACCOUNT_KEY geçerli JSON değil');
-    }
+    const serviceAccount = parseServiceAccount(raw);
 
     // Vercel env vars often store the private key with escaped newlines
     if (typeof serviceAccount.private_key === 'string') {
