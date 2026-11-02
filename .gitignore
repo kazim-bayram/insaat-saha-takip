@@ -38,6 +38,7 @@ database-debug.log
 # Service account keys (NEVER commit these!)
 **/serviceAccountKey.json
 **/serviceAccount*.json
+**/*firebase-adminsdk*.json
 *.pem
 
 # Test coverage
