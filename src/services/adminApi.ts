@@ -42,13 +42,28 @@ async function makeAdminRequest(action: string, params: Record<string, any>): Pr
     })
   });
   
-  const data = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(data.error || 'API request failed');
+  // The server may return HTML/plain text (e.g. Vercel crash page, or SPA fallback in local dev)
+  const text = await response.text();
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
   }
-  
-  return data;
+
+  if (!data) {
+    throw new Error(
+      response.ok
+        ? 'Sunucudan geçersiz yanıt alındı (API bulunamadı olabilir).'
+        : `Sunucu hatası (${response.status}). Lütfen daha sonra tekrar deneyin.`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || 'API isteği başarısız oldu');
+  }
+
+  return data as AdminActionResponse;
 }
 
 /**

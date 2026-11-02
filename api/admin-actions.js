@@ -10,19 +10,39 @@
 
 import admin from 'firebase-admin';
 
-// Initialize Firebase Admin SDK (only once)
-if (!admin.apps.length) {
-  const serviceAccount = JSON.parse(
-    process.env.FIREBASE_SERVICE_ACCOUNT_KEY || '{}'
-  );
-  
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-}
+// Initialize Firebase Admin SDK lazily so config errors return JSON instead of crashing the function
+let auth;
+let db;
 
-const auth = admin.auth();
-const db = admin.firestore();
+function initAdmin() {
+  if (auth && db) return;
+
+  if (!admin.apps.length) {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (!raw) {
+      throw new Error('Sunucu yapılandırması eksik: FIREBASE_SERVICE_ACCOUNT_KEY tanımlı değil');
+    }
+
+    let serviceAccount;
+    try {
+      serviceAccount = JSON.parse(raw);
+    } catch {
+      throw new Error('Sunucu yapılandırması hatalı: FIREBASE_SERVICE_ACCOUNT_KEY geçerli JSON değil');
+    }
+
+    // Vercel env vars often store the private key with escaped newlines
+    if (typeof serviceAccount.private_key === 'string') {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+  }
+
+  auth = admin.auth();
+  db = admin.firestore();
+}
 
 /**
  * CORS headers for frontend requests
@@ -164,6 +184,8 @@ export default async function handler(req, res) {
   }
   
   try {
+    initAdmin();
+
     // Verify admin authentication
     const authHeader = req.headers.authorization;
     await verifyAdmin(authHeader);

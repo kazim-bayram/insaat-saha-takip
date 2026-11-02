@@ -218,7 +218,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 animate-fade-in"
       onClick={handleBackdropClick}
     >
       <div className={`rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl border animate-slide-up ${
@@ -656,7 +656,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ isOpen, onClose }) => {
       {/* Password Reset Modal */}
       {showPasswordResetModal && resetPasswordUser && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 animate-fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget && !resettingPassword) {
               setShowPasswordResetModal(false);
