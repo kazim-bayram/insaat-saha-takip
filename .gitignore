@@ -43,3 +43,5 @@ database-debug.log
 
 # Test coverage
 coverage
+.vercel
+.env*
